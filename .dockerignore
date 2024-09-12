@@ -1,0 +1,12 @@
+/.vscode
+/.dockerignore
+/Dockerfile
+/.git
+/.gitignore
+/.github
+/docs
+/log
+/data
+/justfile
+/Makefile
+!src/config/main.sample.toml
