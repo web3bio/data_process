@@ -1,0 +1,13 @@
+[server]
+server_name = "data_process"
+ip = "127.0.0.1"
+port = 8
+work_path = "/app"
+process_count = 4
+log_path = "/app/log"
+log_level = 1
+log_max_size = 1600
+
+[pg_dsn]
+read = "postgresql://postgres:password@host/dbname"
+write = "postgresql://postgres:password@host/dbname"
