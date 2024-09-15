@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-12 19:07:43
+LastEditTime: 2024-09-15 08:06:33
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -21,6 +21,32 @@ from apscheduler.triggers.cron import CronTrigger
 import setting
 import setting.filelogger as logger
 
+from jobs.farcaster_process_job import FarcasterProcess
+from jobs.lens_process_job import LensProcess
+from jobs.ens_process_job import ENSProcess
+
+
+def farcaster_process_job():
+    logging.info("Starting farcaster_process_job...")
+    FarcasterProcess().process_pipeline()
+
+def farcaster_extras_job():
+    logging.info("Starting farcaster_extras_job...")
+    FarcasterProcess().process_extras()
+
+def lens_process_job():
+    logging.info("Starting lens_process_job...")
+    LensProcess().process_pipeline()
+
+def lens_extras_job():
+    logging.info("Starting farcaster_extras_job...")
+    LensProcess().process_extras()
+
+def ensname_process_job():
+    logging.info("Starting ensname_process_job...")
+    ENSProcess().process_pipeline()
+
+
 if __name__ == "__main__":
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     if not os.path.exists(config["server"]["log_path"]):
@@ -30,8 +56,57 @@ if __name__ == "__main__":
     scheduler = None
     try:
         scheduler = BackgroundScheduler()
-        scheduler.start()
 
+        # ENS Job Start
+        ensname_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="1", minute="0", second="0"
+        )
+        scheduler.add_job(
+            ensname_process_job,
+            trigger=ensname_process_job_trigger,
+            id='ensname_process_job'
+        )
+        # ENS Job End
+
+        # Farcaster Job Start
+        farcaster_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="15", minute="0", second="0"
+        )
+        scheduler.add_job(
+            farcaster_process_job,
+            trigger=farcaster_process_job_trigger,
+            id='farcaster_process_job'
+        )
+        farcaster_extras_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="15", minute="30", second="0"
+        )
+        scheduler.add_job(
+            farcaster_extras_job,
+            trigger=farcaster_extras_job_trigger,
+            id='farcaster_extras_job'
+        )
+        # Farcaster Job End
+
+        # Lens Job Start
+        lens_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="6", minute="0", second="0"
+        )
+        scheduler.add_job(
+            lens_process_job,
+            trigger=lens_process_job_trigger,
+            id='lens_process_job'
+        )
+        lens_extras_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="6", minute="30", second="0"
+        )
+        scheduler.add_job(
+            lens_extras_job,
+            trigger=lens_extras_job_trigger,
+            id='lens_extras_job'
+        )
+        # Lens Job End
+
+        scheduler.start()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")

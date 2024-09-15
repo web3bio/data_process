@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:06:43
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-12 19:06:51
+LastEditTime: 2024-09-14 21:40:00
 FilePath: /data_process/src/setting/__init__.py
 Description: 
 '''
@@ -34,6 +34,16 @@ CHAINBASE = {
     "api_key": "",
 }
 
+NEYNAR = {
+    "api": "",
+    "api_key": "",
+}
+
+LENS = {
+    "api": "",
+    "api_key": "",
+}
+
 
 def load_dsn(config_file):
     """
@@ -59,6 +69,8 @@ def load_settings(env="development"):
     global PG_DSN
     global CHAIN_RPC
     global CHAINBASE
+    global NEYNAR
+    global LENS
 
     config_file = "/app/config/production.toml"
     if env is not None:
@@ -88,6 +100,14 @@ def load_settings(env="development"):
     CHAINBASE = {
         "api": config["chainbase"]["api"],
         "api_key": config["chainbase"]["api_key"],
+    }
+    NEYNAR = {
+        "api": config["neynar"]["api"],
+        "api_key": config["neynar"]["api_key"],
+    }
+    LENS = {
+        "api": config["lens"]["api"],
+        "api_key": config["lens"]["api_key"],
     }
     return config
 
