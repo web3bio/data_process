@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:11:40
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-15 08:05:26
+LastEditTime: 2024-09-15 08:48:47
 FilePath: /data_process/src/jobs/ens_process_job.py
 Description: 
 '''
@@ -1092,8 +1092,6 @@ class ENSProcess(object):
                         )
                         logging.info("Upserted[ensname] batch with size [%d], batch_times %d", len(batch), batch_times)
                         batch = []
-                        if batch_times > 10:
-                            break
 
                 # remaining
                 if batch:
