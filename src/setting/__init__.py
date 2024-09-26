@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:06:43
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-14 21:40:00
+LastEditTime: 2024-09-26 16:59:08
 FilePath: /data_process/src/setting/__init__.py
 Description: 
 '''
@@ -16,6 +16,16 @@ import toml
 Settings = {
     "env": "development",
     "datapath": "./data",
+}
+
+TIGERGRAPH_SETTINGS = {
+    "host": "",
+    "inner_port": 9000,
+    "restpp": 14240,
+    "username": "",
+    "password": "",
+    "social_graph_name": "",
+    "social_graph_token": "",
 }
 
 PG_DSN = {
@@ -67,6 +77,7 @@ def load_settings(env="development"):
     """
     global Settings
     global PG_DSN
+    global TIGERGRAPH_SETTINGS
     global CHAIN_RPC
     global CHAINBASE
     global NEYNAR
@@ -108,6 +119,15 @@ def load_settings(env="development"):
     LENS = {
         "api": config["lens"]["api"],
         "api_key": config["lens"]["api_key"],
+    }
+    TIGERGRAPH_SETTINGS = {
+        "host": config["tdb"]["host"],
+        "inner_port": config["tdb"]["inner_port"],
+        "restpp": config["tdb"]["restpp"],
+        "username": config["tdb"]["username"],
+        "password": config["tdb"]["password"],
+        "social_graph_name": config["tdb"]["social_graph_name"],
+        "social_graph_token": config["tdb"]["social_graph_token"],
     }
     return config
 
