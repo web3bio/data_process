@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 00:52:47
+LastEditTime: 2024-09-29 00:55:28
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -226,7 +226,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null order by id LIMIT 1000" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
