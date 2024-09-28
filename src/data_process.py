@@ -84,7 +84,7 @@ if __name__ == "__main__":
             id='farcaster_process_job'
         )
         farcaster_extras_job_trigger = CronTrigger(
-            year="*", month="*", day="*", hour="15", minute="30", second="0"
+            year="*", month="*", day="*", hour="16", minute="30", second="0"
         )
         scheduler.add_job(
             farcaster_extras_job,
