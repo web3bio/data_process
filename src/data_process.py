@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-15 08:06:33
+LastEditTime: 2024-09-28 22:39:23
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -24,6 +24,8 @@ import setting.filelogger as logger
 from jobs.farcaster_process_job import FarcasterProcess
 from jobs.lens_process_job import LensProcess
 from jobs.ens_process_job import ENSProcess
+
+from jobs.ens_graphdb_job import EnsGraphDB
 
 
 def farcaster_process_job():
@@ -45,6 +47,10 @@ def lens_extras_job():
 def ensname_process_job():
     logging.info("Starting ensname_process_job...")
     ENSProcess().process_pipeline()
+
+def ensname_graphdb_job():
+    logging.info("Starting ensname_graphdb_job...")
+    EnsGraphDB().dumps_to_graphdb()
 
 
 if __name__ == "__main__":
@@ -107,6 +113,9 @@ if __name__ == "__main__":
         # Lens Job End
 
         scheduler.start()
+
+        # testing job
+        ensname_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")

@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-27 00:02:45
+LastEditTime: 2024-09-28 22:38:40
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -75,10 +75,109 @@ class EnsGraphDB(object):
             cursor.close()
             conn.close()
 
+    def process_ensname_temp_reverse(self):
+        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/temp_reverse")
+        if not os.path.exists(graphdb_process_dirs):
+            os.makedirs(graphdb_process_dirs)
+
+        # vertices
+        etheruem_path = os.path.join(graphdb_process_dirs, "ethereum.Identities.csv")
+        name_path = os.path.join(graphdb_process_dirs, "ensname.Identities.csv")
+        identities_graph_path = os.path.join(graphdb_process_dirs, "IdentitiesGraph.csv")
+        # edges
+        part_of_identities_graph_path = os.path.join(graphdb_process_dirs, "PartOfIdentitiesGraph.csv")
+        reverse_resolve_path = os.path.join(graphdb_process_dirs, "Reverse_Resolve.csv")
+
+        read_conn = psycopg2.connect(setting.PG_DSN["read"])
+        cursor = read_conn.cursor()
+
+        try:
+            temp_reverse = "temp_reverse"
+            columns = ['graph_id', 'updated_nanosecond', 'name', 'reverse_address', 'expire_time']
+            select_sql = "SELECT %s FROM %s" % (",".join(columns), temp_reverse)
+            cursor.execute(select_sql)
+            rows = cursor.fetchall()
+            temp_reverse_df = pd.DataFrame(rows, columns=columns)
+
+            temp_reverse_df['expire_time'] = pd.to_datetime(temp_reverse_df['expire_time'], errors='coerce')
+
+            name_df = temp_reverse_df[['name', 'expire_time']].copy()
+            name_df['primary_id'] = name_df['name'].apply(lambda x: f"ens,{x}")
+            name_df['platform'] = 'ens'
+            name_df.loc[:, 'identity'] = name_df['name']
+            name_df.loc[:, 'display_name'] = name_df['name']
+            name_df['reverse'] = True
+            name_df['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            name_df['expired_at'] = name_df['expire_time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            name_df['uuid'] = name_df.apply(lambda _: str(uuid.uuid4()), axis=1)
+            name_df = name_df[['primary_id', 'uuid', 'platform', 'identity', 'display_name', 'updated_at', 'reverse', 'expired_at']]
+            name_df.to_csv(name_path, sep='\t', index=False)
+
+            ethereum_df = temp_reverse_df[['reverse_address', 'name']].copy()
+            ethereum_df['primary_id'] = ethereum_df['reverse_address'].apply(lambda x: f"ethereum,{x}")
+            ethereum_df['platform'] = 'ethereum'
+            ethereum_df.loc[:, 'identity'] = ethereum_df['reverse_address']
+            ethereum_df.loc[:, 'display_name'] = ethereum_df['name']
+            ethereum_df['reverse'] = True
+            ethereum_df['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            ethereum_df['uuid'] = ethereum_df.apply(lambda _: str(uuid.uuid4()), axis=1)
+            ethereum_df = ethereum_df[['primary_id', 'uuid', 'platform', 'identity', 'display_name', 'reverse', 'updated_at']]
+            ethereum_df.to_csv(etheruem_path, sep='\t', index=False)
+
+            identities_graph_df = temp_reverse_df[['graph_id', 'updated_nanosecond']].copy()
+            identities_graph_df = identities_graph_df.drop_duplicates(subset=['graph_id'])
+            identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
+
+            partof_ethereum = temp_reverse_df[['reverse_address', 'graph_id']].copy()
+            partof_ethereum['ethereum_unique_id'] = partof_ethereum['reverse_address'].apply(lambda x: f"ethereum,{x}")
+            partof_ethereum = partof_ethereum[['ethereum_unique_id', 'graph_id']]
+            partof_ethereum = partof_ethereum.drop_duplicates(subset=['ethereum_unique_id', 'graph_id'])
+            # rename the columns
+            partof_ethereum = partof_ethereum.rename(columns={
+                'ethereum_unique_id': 'from',
+                'graph_id': 'to'
+            })
+
+            partof_ensname = temp_reverse_df[['name', 'graph_id']].copy()
+            partof_ensname['ens_unique_id'] = partof_ensname['name'].apply(lambda x: f"ens,{x}")
+            partof_ensname = partof_ensname[['ens_unique_id', 'graph_id']]
+            partof_ensname = partof_ensname.drop_duplicates(subset=['ens_unique_id', 'graph_id'])
+            # rename the columns
+            partof_ensname = partof_ensname.rename(columns={
+                'ens_unique_id': 'from',
+                'graph_id': 'to'
+            })
+
+            part_of_identities_graph_df = pd.concat([partof_ensname, partof_ethereum])
+            part_of_identities_graph_df.to_csv(part_of_identities_graph_path, sep='\t', index=False)
+
+            # Reverse.csv
+            reverse_grouped = temp_reverse_df[['name', 'reverse_address']].copy()
+            reverse_grouped['from'] = reverse_grouped.apply(lambda x: f"ethereum,{x['reverse_address']}", axis=1)
+            reverse_grouped['to'] = reverse_grouped.apply(lambda x: f"ens,{x['name']}", axis=1)
+            reverse_grouped['source'] = "the_graph"
+            reverse_grouped['system'] = "ens"
+            reverse_grouped['uuid'] = reverse_grouped.apply(lambda _: str(uuid.uuid4()), axis=1)
+            reverse_grouped['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            reverse_grouped['fetcher'] = "relation_service"
+            reverse_resolve_df = reverse_grouped[['from', 'to', 'source', 'system', 'name', 'uuid', 'updated_at', 'fetcher']]
+            reverse_resolve_df.to_csv(reverse_resolve_path, sep='\t', index=False)
+
+        except Exception as ex:
+            logging.exception(ex)
+            raise ex
+        finally:
+            cursor.close()
+            read_conn.close()
+
     def process_ensname_identity_graph(self):
         graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname")
         if not os.path.exists(graphdb_process_dirs):
             os.makedirs(graphdb_process_dirs)
+
+        start = time.time()
+        logging.info("processing ensname_identity_graph start at: %s", \
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start)))
 
         # allocation
         allocation_path = os.path.join(graphdb_process_dirs, "graph_id.csv")
@@ -97,7 +196,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null LIMIT 10000" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
@@ -312,16 +411,261 @@ class EnsGraphDB(object):
             cursor.close()
             read_conn.close()
 
+        end = time.time()
+        ts_delta = end - start
+        logging.info("processing ensname_identity_graph end at: %s", \
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
+        logging.info("processing ensname_identity_graph cost: %d", ts_delta)
+
+    def save_graph_id(self, dump_batch_size=10000):
+        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname")
+        if not os.path.exists(graphdb_process_dirs):
+            raise FileNotFoundError(f"No directory {graphdb_process_dirs}")
+
+        # allocation
+        allocation_path = os.path.join(graphdb_process_dirs, "graph_id.csv")
+        if not os.path.exists(allocation_path):
+            raise FileNotFoundError(f"No data path {allocation_path}")
+
+        start = time.time()
+        logging.info("saving graph_id allocation start at: %s", \
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start)))
+
+        insert_graph_id = """
+        INSERT INTO graph_id (
+            unique_id,
+            graph_id,
+            platform,
+            identity,
+            updated_nanosecond
+        ) VALUES %s
+        ON CONFLICT (unique_id)
+        DO UPDATE SET
+            graph_id = EXCLUDED.graph_id,
+            platform = EXCLUDED.platform,
+            identity = EXCLUDED.identity,
+            updated_nanosecond = EXCLUDED.updated_nanosecond;
+        """
+
+        write_conn = psycopg2.connect(setting.PG_DSN["write"])
+        write_conn.autocommit = True
+        cursor = write_conn.cursor()
+
+        cnt = 0
+        batch = []
+        batch_times = 0
+        try:
+            # Loading `graph_id.csv` for allocation
+            with open(allocation_path, 'r', encoding="utf-8") as csvfile:
+                csv_reader = csv.reader(csvfile)
+                header = next(csv_reader)  # Skip the header
+                logging.info("[%s] header: %s", allocation_path, header)
+                batch = []
+                for row in csv_reader:
+                    cnt += 1
+                    batch.append(row)
+                    if len(batch) >= dump_batch_size:
+                        # bulk insert
+                        batch_times += 1
+                        execute_values(
+                            cursor, insert_graph_id, batch, template=None, page_size=dump_batch_size
+                        )
+                        logging.info("Upserted[graph_id] batch with size [%d], batch_times %d", len(batch), batch_times)
+                        batch = []
+
+                # remaining
+                if batch:
+                    batch_times += 1
+                    execute_values(
+                        cursor, insert_graph_id, batch, template=None, page_size=len(batch)
+                    )
+                    logging.info("Upserted[graph_id] batch with size [%d], batch_times %d", len(batch), batch_times)
+            os.rename(allocation_path, allocation_path + ".finished")
+
+        except Exception as ex:
+            logging.exception(ex)
+            raise ex
+        finally:
+            cursor.close()
+            write_conn.close()
+
+        end = time.time()
+        ts_delta = end - start
+        logging.info("saving graph_id allocation end at: %s", \
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
+        logging.info("saving graph_id allocation cost: %d", ts_delta)
+
+    def check_status(self, job_id):
+        '''
+        description: Check Job Status
+        {
+            "error": false,
+            "message": "",
+            "results": [{
+                "overall": {
+                    "duration": 1205,
+                    "size": 1252574,
+                    "progress": 1,
+                    "startTime": 1727371282760,
+                    "averageSpeed": 13249,
+                    "id": "SocialGraph.Load_Test.file.m1.1727371282757",
+                    "endTime": 1727371284150,
+                    "currentSpeed": 13249,
+                    "status": "FINISHED",
+                    "statistics": {
+                        "fileLevel": {
+                            "validLine": 15965
+                        },
+                        "objectLevel": {
+                            "vertex": [{
+                                "validObject": 15965,
+                                "typeName": "Identities"
+                            }]
+                        }
+                    }
+                },
+                "workers": [{
+                    "tasks": [{
+                        "filename": "/home/tigergraph/shared_data/import_graphs/ensname/Identities.csv"
+                    }]
+                }]
+            }]
+        }
+        '''
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + setting.TIGERGRAPH_SETTINGS["social_graph_token"]
+        }
+        # # GET 'http://hostname:restpp/gsql/v1/loading-jobs/status/{{job_id}}?graph=SocialGraph'
+        status_job_url = "http://{}:{}/gsql/v1/loading-jobs/status/{}?graph={}".format(
+            setting.TIGERGRAPH_SETTINGS["host"],
+            setting.TIGERGRAPH_SETTINGS["restpp"],
+            job_id,
+            setting.TIGERGRAPH_SETTINGS["social_graph_name"])
+        response = requests.get(
+            url=status_job_url,
+            headers=headers,
+            timeout=60
+        )
+        raw_text = response.text
+        res = json.loads(raw_text)
+        if "error" in res:
+            if res["error"] is True:
+                error_msg = "graphdb_server check job status[{}] failed: url={}, error={}".format(
+                    status_job_url, job_id, res)
+                logging.error(error_msg)
+                raise Exception(error_msg)
+
+            job_status = None
+            if len(res["results"]) > 0:
+                overall = res["results"][0].get("overall", None)
+                if overall is not None:
+                    job_status = overall.get("status", None)
+
+            return job_status
+
+    def get_loading_job_status(self, job_id):
+        max_times = 40
+        sleep_second = 15
+        status = None
+        cnt = 0
+        try:
+            while status != "FINISHED" and status != "FAILED" and cnt < max_times:
+                status = self.check_status(job_id)
+                cnt += 1
+                logging.debug("%s %s", job_id, status)
+                if status is not None:
+                    if status == "FINISHED" or status == "FAILED":
+                        break
+                else:
+                    logging.error("check_status return None, job_id=%s", job_id)
+                time.sleep(sleep_second)
+
+                if status == "FAILED":
+                    raise Exception("job_id=[%s] check_status[%s]", job_id, status)
+                if cnt >= max_times:
+                    raise Exception("job_id=[%s] check_status timeout(%d)", job_id, sleep_second * max_times)
+            
+            return status
+        except Exception as ex:
+            raise ex
+
+    def run_loading_job(self):
+        # POST 'http://hostname:restpp/gsql/v1/loading-jobs/run?graph=SocialGraph'
+        # -d '[{"name":"Job_Name","sys.data_root":"/tmp","dataSources":[]}]'
+        ens_loading_job_name = "Load_Ens"
+        start = time.time()
+        logging.info("run loading job[%s] start at: %s", \
+                ens_loading_job_name,
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start)))
+
+        job_run_url = "http://{}:{}/gsql/v1/loading-jobs/run?graph={}".format(
+            setting.TIGERGRAPH_SETTINGS["host"],
+            setting.TIGERGRAPH_SETTINGS["restpp"],
+            setting.TIGERGRAPH_SETTINGS["social_graph_name"])
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + setting.TIGERGRAPH_SETTINGS["social_graph_token"]
+        }
+        payload = [{
+            "name": ens_loading_job_name,
+            "sys.data_root": setting.TIGERGRAPH_SETTINGS["graph_data_root"],
+            "dataSources": []
+        }]
+        response = requests.post(url=job_run_url, data=json.dumps(payload), headers=headers, timeout=60)
+        if response.status_code != 200:
+            error_msg = "graphdb_server run loading job[{}] failed: url={}, {} {}".format(
+                job_run_url, ens_loading_job_name, response.status_code, response.reason)
+            logging.warn(error_msg)
+            raise Exception(error_msg)
+
+        raw_text = response.text
+        res = json.loads(raw_text)
+        # {
+        #     "jobIds": ["jobId"],
+        #     "messages": "Successfully ran loading job(s): [Load_Ens].",
+        #     "error": false,
+        #     "message": ""
+        # }
+        if "error" in res:
+            if res["error"] is True:
+                error_msg = "graphdb_server run loading job[{}] failed: url={}, error={}".format(
+                    job_run_url, ens_loading_job_name, res)
+                logging.error(error_msg)
+                raise Exception(error_msg)
+            else:
+                job_ids = res.get("jobIds")
+                if len(job_ids) == 0:
+                    error_msg = "graphdb_server run loading job[{}] failed: url={}, job_ids={} job_ids is empty".format(
+                        job_run_url, ens_loading_job_name, job_ids)
+                    logging.error(error_msg)
+                    raise Exception(error_msg)
+                else:
+                    job_id = job_ids[0]
+                    logging.info("Successfully run loading job(s): [{}]".format(job_id))
+                    
+                    # Check Job Status
+                    status = self.get_loading_job_status(job_id)
+                    logging.info("run loading job(s): [{}] status[{}]".format(job_id, status))
+
+        end = time.time()
+        ts_delta = end - start
+        logging.info("run loading job[%s]  end at: %s", \
+                    ens_loading_job_name,
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
+        logging.info("run loading job[%s]  cost: %d", ens_loading_job_name, ts_delta)
 
     def dumps_to_graphdb(self):
-        # when it exists: update value
-        # find the HyperVertex: IdentitiesGraph
-        # if it doesn't exist: insert value
-        # from（Identity）New, to（Identity）New: New_GraphID * 2
-        # from（Identity）Old:From_GraphID, to（Identity）New:   Old:From_GraphID -> to
-        # from（Identity）New, to（Identity）Old:To_GraphID: Old:To_GraphID -> from
-        # from（Identity）Old:From_GraphID, to（Identity）Old:To_GraphID: Combine two GraphID if there are different
-        pass
+        try:
+            # self.update_job_status("start")
+            # self.update_job_status("running")
+            self.process_ensname_identity_graph()
+            self.save_graph_id()
+            self.run_loading_job()
+            # self.update_job_status("end")
+        except Exception as ex:
+            logging.exception(ex)
+            # self.update_job_status("fail")
 
 
 if __name__ == '__main__':

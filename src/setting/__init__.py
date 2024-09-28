@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:06:43
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-26 16:59:08
+LastEditTime: 2024-09-28 21:55:28
 FilePath: /data_process/src/setting/__init__.py
 Description: 
 '''
@@ -20,11 +20,13 @@ Settings = {
 
 TIGERGRAPH_SETTINGS = {
     "host": "",
-    "inner_port": 9000,
-    "restpp": 14240,
+    "inner_port": 0,
+    "restpp": 0,
     "username": "",
     "password": "",
+    "graph_data_root": "",
     "social_graph_name": "",
+    "social_graph_secret": "",
     "social_graph_token": "",
 }
 
@@ -126,7 +128,9 @@ def load_settings(env="development"):
         "restpp": config["tdb"]["restpp"],
         "username": config["tdb"]["username"],
         "password": config["tdb"]["password"],
+        "graph_data_root": config["tdb"]["graph_data_root"],
         "social_graph_name": config["tdb"]["social_graph_name"],
+        "social_graph_secret": config["tdb"]["social_graph_secret"],
         "social_graph_token": config["tdb"]["social_graph_token"],
     }
     return config
