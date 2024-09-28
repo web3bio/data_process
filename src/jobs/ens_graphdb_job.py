@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 01:07:28
+LastEditTime: 2024-09-29 01:17:33
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -318,7 +318,7 @@ class EnsGraphDB(object):
 
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                     left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
-            
+
             logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
             # ['ens_unique_id', 'ethereum_unique_id', 'name', 'resolved_address',
             # 'unique_id', 'graph_id', 'updated_nanosecond', 'unique_id_ethereum',
@@ -388,7 +388,8 @@ class EnsGraphDB(object):
                 'ethereum_updated_nanosecond': 'updated_nanosecond'
             })
 
-            ens_part = final_df[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
+            ens_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
+            ens_part = ens_part[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
             ens_part['platform'] = 'ens'
             ens_part = ens_part.rename(columns={
                 'ens_unique_id': 'unique_id',
