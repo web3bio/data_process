@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 02:13:11
+LastEditTime: 2024-09-29 02:50:12
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -155,13 +155,13 @@ class EnsGraphDB(object):
             ethereum_df.to_csv(etheruem_path, sep='\t', index=False)
 
             identities_graph_df = temp_reverse_df[['graph_id', 'updated_nanosecond']].copy()
-            identities_graph_df = identities_graph_df.drop_duplicates(subset=['graph_id'])
+            identities_graph_df = identities_graph_df.drop_duplicates(subset=['graph_id'], keep='last')
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
 
             partof_ethereum = temp_reverse_df[['reverse_address', 'graph_id']].copy()
             partof_ethereum['ethereum_unique_id'] = partof_ethereum['reverse_address'].apply(lambda x: f"ethereum,{x}")
             partof_ethereum = partof_ethereum[['ethereum_unique_id', 'graph_id']]
-            partof_ethereum = partof_ethereum.drop_duplicates(subset=['ethereum_unique_id', 'graph_id'])
+            partof_ethereum = partof_ethereum.drop_duplicates(subset=['ethereum_unique_id', 'graph_id'], keep='last')
             # rename the columns
             partof_ethereum = partof_ethereum.rename(columns={
                 'ethereum_unique_id': 'from',
@@ -171,7 +171,7 @@ class EnsGraphDB(object):
             partof_ensname = temp_reverse_df[['name', 'graph_id']].copy()
             partof_ensname['ens_unique_id'] = partof_ensname['name'].apply(lambda x: f"ens,{x}")
             partof_ensname = partof_ensname[['ens_unique_id', 'graph_id']]
-            partof_ensname = partof_ensname.drop_duplicates(subset=['ens_unique_id', 'graph_id'])
+            partof_ensname = partof_ensname.drop_duplicates(subset=['ens_unique_id', 'graph_id'], keep='last')
             # rename the columns
             partof_ensname = partof_ensname.rename(columns={
                 'ens_unique_id': 'from',
@@ -244,7 +244,7 @@ class EnsGraphDB(object):
             ethereum_df['platform'] = 'ethereum'
             ethereum_df['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ethereum_df = ethereum_df[['primary_id', 'platform', 'identity', 'update_time']]
-            ethereum_df = ethereum_df.drop_duplicates(subset=['identity'])
+            ethereum_df = ethereum_df.drop_duplicates(subset=['identity'], keep='last')
 
             name_df = ensnames_df[['name']].copy()
             name_df['primary_id'] = name_df['name'].apply(lambda x: f"ens,{x}")
@@ -346,7 +346,7 @@ class EnsGraphDB(object):
 
             identities_graph_df = final_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']].copy()
             identities_graph_df = identities_graph_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']]
-            identities_graph_df = identities_graph_df.drop_duplicates(subset=['ethereum_graph_id'])
+            identities_graph_df = identities_graph_df.drop_duplicates(subset=['ethereum_graph_id'], keep='last')
             # rename the columns
             identities_graph_df = identities_graph_df.rename(columns={
                 'ethereum_graph_id': 'primary_id',
@@ -357,7 +357,7 @@ class EnsGraphDB(object):
 
             partof_ethereum = final_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
             partof_ethereum = partof_ethereum[['ethereum_unique_id', 'ethereum_graph_id']]
-            partof_ethereum = partof_ethereum.drop_duplicates(subset=['ethereum_unique_id', 'ethereum_graph_id'])
+            partof_ethereum = partof_ethereum.drop_duplicates(subset=['ethereum_unique_id', 'ethereum_graph_id'], keep='last')
             # rename the columns
             partof_ethereum = partof_ethereum.rename(columns={
                 'ethereum_unique_id': 'from',
@@ -366,7 +366,7 @@ class EnsGraphDB(object):
 
             partof_ensname = final_df[['ens_unique_id', 'ens_graph_id']].copy()
             partof_ensname = partof_ensname[['ens_unique_id', 'ens_graph_id']]
-            partof_ensname = partof_ensname.drop_duplicates(subset=['ens_unique_id', 'ens_graph_id'])
+            partof_ensname = partof_ensname.drop_duplicates(subset=['ens_unique_id', 'ens_graph_id'], keep='last')
             # rename the columns
             partof_ensname = partof_ensname.rename(columns={
                 'ens_unique_id': 'from',
@@ -400,7 +400,7 @@ class EnsGraphDB(object):
 
             final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
             final_graph_id_df = final_graph_id_df[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
-            final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id', 'graph_id'])
+            final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id'], keep='last')
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
             logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])
 
@@ -426,6 +426,11 @@ class EnsGraphDB(object):
         allocation_path = os.path.join(graphdb_process_dirs, "graph_id.csv")
         if not os.path.exists(allocation_path):
             raise FileNotFoundError(f"No data path {allocation_path}")
+
+        # df = pd.read_csv(allocation_path)
+        # print(df.shape[0])
+        # df_deduped = df.drop_duplicates(subset=['unique_id'], keep='last')
+        # print(df_deduped.shape[0])
 
         start = time.time()
         logging.info("saving graph_id allocation start at: %s", \
@@ -677,5 +682,5 @@ if __name__ == '__main__':
     logger.InitLogger(config)
 
     EnsGraphDB().process_ensname_identity_graph()
-    EnsGraphDB().save_graph_id()
+    # EnsGraphDB().save_graph_id()
     # EnsGraphDB().run_loading_job()
