@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-28 22:38:40
+LastEditTime: 2024-09-28 23:16:07
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -200,6 +200,7 @@ class EnsGraphDB(object):
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
+            logging.debug("Successfully load table ensname")
 
             # Check if 'is_wrapped' is True, then replace 'owner' with 'wrapped_owner'
             ensnames_df.loc[ensnames_df['is_wrapped'] == True, 'owner'] = ensnames_df['wrapped_owner']
@@ -224,6 +225,7 @@ class EnsGraphDB(object):
 
             identities_df = pd.concat([name_df, ethereum_df])
             identities_df.to_csv(identities_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", identities_path)
 
             # Hold.csv
             hold_df = ensnames_df[ensnames_df['owner'].notna()]
@@ -234,6 +236,7 @@ class EnsGraphDB(object):
             hold_grouped['level'] = 5
             hold_df = hold_grouped[['from', 'to', 'source', 'level']]
             hold_df.to_csv(hold_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", hold_path)
 
             # Resolve.csv
             resolve_df = ensnames_df[ensnames_df['resolved_address'].notna()]
@@ -244,6 +247,7 @@ class EnsGraphDB(object):
             resolve_grouped['level'] = 5
             resolve_df = resolve_grouped[['from', 'to', 'source', 'level']]
             resolve_df.to_csv(resolve_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", resolve_path)
 
             # Reverse.csv
             reverse_resolve_df = ensnames_df[ensnames_df['reverse_address'].notna()]
@@ -254,14 +258,16 @@ class EnsGraphDB(object):
             reverse_grouped['level'] = 5
             reverse_resolve_df = reverse_grouped[['from', 'to', 'source', 'level']]
             reverse_resolve_df.to_csv(reverse_resolve_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", reverse_resolve_path)
 
             # Loading graph_id allocation table
-            ensname = "graph_id"
+            graph_id_table = "graph_id"
             columns = ['unique_id', 'graph_id', 'updated_nanosecond']
-            select_sql = "SELECT %s FROM %s" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE platform in ('ethereum', 'ens')" % (",".join(columns), graph_id_table)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             allocation_df = pd.DataFrame(rows, columns=columns)
+            logging.debug("Successfully load table graph_id")
 
             # only resolved_address == owner can add to identity_graph, otherwise ens just `Hold`
             filter_df = ensnames_df[(ensnames_df['owner'].notna()) &
@@ -286,6 +292,7 @@ class EnsGraphDB(object):
             merged_ethereum = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                                        left_on='ethereum_unique_id', right_on='unique_id', how='left')
 
+            logging.debug("Successfully merge ensname and allocation graph_id")
             # Reset indexes to ensure alignment
             final_df = final_df.reset_index(drop=True)
             merged_ens = merged_ens.reset_index(drop=True)
@@ -359,6 +366,7 @@ class EnsGraphDB(object):
                 'ethereum_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", identities_graph_path)
 
             partof_ethereum = final_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
             partof_ethereum = partof_ethereum[['ethereum_unique_id', 'ethereum_graph_id']]
@@ -380,6 +388,7 @@ class EnsGraphDB(object):
 
             part_of_identities_graph_df = pd.concat([partof_ensname, partof_ethereum])
             part_of_identities_graph_df.to_csv(part_of_identities_graph_path, sep='\t', index=False)
+            logging.debug("Successfully save %s", part_of_identities_graph_path)
 
             # Filter out rows where combine_type is "both_exist_and_same"
             ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
@@ -403,6 +412,7 @@ class EnsGraphDB(object):
 
             allocation_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
             allocation_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
+            logging.debug("Successfully save %s", allocation_path)
 
         except Exception as ex:
             logging.exception(ex)

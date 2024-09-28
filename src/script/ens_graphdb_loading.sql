@@ -6,8 +6,6 @@ CREATE LOADING JOB Load_Ens FOR GRAPH SocialGraph {
   LOAD "/home/tigergraph/shared_data/import_graphs/ensname/PartOfIdentitiesGraph.csv"
     TO EDGE PartOfIdentitiesGraph VALUES ($"from", $"to") USING SEPARATOR = "\t", EOL = "\n", HEADER = "true";
 
-  LOAD "/home/tigergraph/shared_data/import_graphs/ensname/Proof_Forward.csv"
-    TO EDGE Proof_Forward VALUES ($"from", $"to", $"source", $"level", $"record_id") USING SEPARATOR = "\t", EOL = "\n", HEADER = "true";
   LOAD "/home/tigergraph/shared_data/import_graphs/ensname/Hold.csv"
     TO EDGE Hold VALUES ($"from", $"to", $"source", $"level") USING SEPARATOR = "\t", EOL = "\n", HEADER = "true";
   LOAD "/home/tigergraph/shared_data/import_graphs/ensname/Resolve.csv"
