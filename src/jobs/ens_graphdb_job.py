@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 01:17:33
+LastEditTime: 2024-09-29 01:28:29
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -380,6 +380,7 @@ class EnsGraphDB(object):
             # Filter out rows where combine_type is "both_exist_and_same"
             ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ethereum_part = ethereum_part[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
+            ethereum_part = ethereum_part.drop_duplicates(subset=['ethereum_unique_id'])
             ethereum_part['platform'] = 'ethereum'
             ethereum_part = ethereum_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
@@ -390,6 +391,7 @@ class EnsGraphDB(object):
 
             ens_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ens_part = ens_part[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
+            ens_part = ens_part.drop_duplicates(subset=['ens_unique_id'])
             ens_part['platform'] = 'ens'
             ens_part = ens_part.rename(columns={
                 'ens_unique_id': 'unique_id',
