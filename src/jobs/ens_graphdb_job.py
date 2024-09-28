@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 00:55:28
+LastEditTime: 2024-09-29 01:07:28
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -398,6 +398,7 @@ class EnsGraphDB(object):
             })
 
             final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
+            final_graph_id_df = final_graph_id_df[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
             logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])
 
