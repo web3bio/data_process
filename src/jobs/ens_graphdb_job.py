@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 04:34:21
+LastEditTime: 2024-09-29 04:55:43
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -213,7 +213,7 @@ class EnsGraphDB(object):
             read_conn.close()
 
     def process_ensname_identity_graph(self):
-        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname_test")
+        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname")
         if not os.path.exists(graphdb_process_dirs):
             os.makedirs(graphdb_process_dirs)
 
@@ -238,7 +238,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null order by id limit 3000" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
@@ -342,8 +342,6 @@ class EnsGraphDB(object):
             ]] = owner_isolate_df.apply(isolate_logic, axis=1, result_type="expand")
             owner_isolate_df = owner_isolate_df[['owner', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond', 'combine_type']]
             owner_isolate_df = owner_isolate_df[owner_isolate_df['combine_type'] != "exist"]
-            print(owner_isolate_df.columns)
-            print(owner_isolate_df.head(10))
             logging.debug("Successfully filter owner_isolate_df row_count: %d", owner_isolate_df.shape[0])
 
             # owner not null, resolved_address not null, reverse_address is null:
@@ -367,8 +365,6 @@ class EnsGraphDB(object):
             ]] = resolved_isolate_df.apply(isolate_logic, axis=1, result_type="expand")
             resolved_isolate_df = resolved_isolate_df[['resolved_address', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond', 'combine_type']]
             resolved_isolate_df = resolved_isolate_df[resolved_isolate_df['combine_type'] != "exist"]
-            print(resolved_isolate_df.columns)
-            print(resolved_isolate_df.head(10))
             logging.debug("Successfully filter resolved_isolate_df row_count: %d", resolved_isolate_df.shape[0])
 
             # ensname resolved_address not null, reverse_address not null:
@@ -380,8 +376,6 @@ class EnsGraphDB(object):
                 (ensnames_df['resolved_address'] == ensnames_df['reverse_address']) &
                 (ensnames_df['resolved_address'] != '0x0000000000000000000000000000000000000000')]
             additional_df = additional_df[['name', 'owner', 'resolved_address']]
-            print(additional_df.columns)
-            print(additional_df.head(10))
             logging.debug("Successfully filter additional_df(resolved_address == reverse_address) row_count: %d", additional_df.shape[0])
 
             # only resolved_address == owner can add to identity_graph, otherwise ens just `Hold`
@@ -490,6 +484,7 @@ class EnsGraphDB(object):
             # Filter out rows where combine_type is "both_exist_and_same"
             ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ethereum_part = ethereum_part[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
+            ethereum_part = ethereum_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
             ethereum_part['platform'] = 'ethereum'
             ethereum_part = ethereum_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
@@ -500,6 +495,7 @@ class EnsGraphDB(object):
 
             ens_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ens_part = ens_part[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
+            ens_part = ens_part.drop_duplicates(subset=['ens_unique_id'], keep='last')
             ens_part['platform'] = 'ens'
             ens_part = ens_part.rename(columns={
                 'ens_unique_id': 'unique_id',
@@ -509,6 +505,7 @@ class EnsGraphDB(object):
             })
 
             owner_isolate_part = owner_isolate_df[['ethereum_unique_id', 'ethereum_graph_id', 'owner', 'ethereum_updated_nanosecond']].copy()
+            owner_isolate_part = owner_isolate_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
             owner_isolate_part['platform'] = 'ethereum'
             owner_isolate_part = owner_isolate_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
@@ -518,6 +515,7 @@ class EnsGraphDB(object):
             })
 
             resolved_isolate_part = resolved_isolate_df[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
+            resolved_isolate_part = resolved_isolate_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
             resolved_isolate_part['platform'] = 'ethereum'
             resolved_isolate_part = resolved_isolate_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
@@ -792,15 +790,15 @@ class EnsGraphDB(object):
 
     def dumps_to_graphdb(self):
         try:
-            # self.update_job_status("start")
-            # self.update_job_status("running")
+            self.update_job_status("start")
+            self.update_job_status("running")
             self.process_ensname_identity_graph()
             self.save_graph_id()
             self.run_loading_job()
-            # self.update_job_status("end")
+            self.update_job_status("end")
         except Exception as ex:
             logging.exception(ex)
-            # self.update_job_status("fail")
+            self.update_job_status("fail")
 
 
 if __name__ == '__main__':
