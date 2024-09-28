@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 00:10:36
+LastEditTime: 2024-09-29 00:28:11
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -312,12 +312,14 @@ class EnsGraphDB(object):
 
             logging.debug("Start merge final_df row_count: %d and allocation_df row_count: %d", final_df.shape[0], allocation_df.shape[0])
             # merge final_df with allocation_df for both `ens_unique_id` and `ethereum_unique_id`
+
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                    left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('', '_ens'))
+                    left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('_ens', ''))
+
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                     left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
             logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
-            final_df.drop(columns=['unique_id', 'unique_id_ens', 'unique_id_ethereum'], inplace=True)
+            final_df.drop(columns=['unique_id_ens', 'unique_id_ethereum'], inplace=True)
 
             logging.debug("Start combine_logic...")
             final_df[
