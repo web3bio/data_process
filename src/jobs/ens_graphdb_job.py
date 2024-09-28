@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 01:28:29
+LastEditTime: 2024-09-29 02:13:11
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -380,7 +380,6 @@ class EnsGraphDB(object):
             # Filter out rows where combine_type is "both_exist_and_same"
             ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ethereum_part = ethereum_part[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
-            ethereum_part = ethereum_part.drop_duplicates(subset=['ethereum_unique_id'])
             ethereum_part['platform'] = 'ethereum'
             ethereum_part = ethereum_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
@@ -391,7 +390,6 @@ class EnsGraphDB(object):
 
             ens_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
             ens_part = ens_part[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
-            ens_part = ens_part.drop_duplicates(subset=['ens_unique_id'])
             ens_part['platform'] = 'ens'
             ens_part = ens_part.rename(columns={
                 'ens_unique_id': 'unique_id',
@@ -402,6 +400,7 @@ class EnsGraphDB(object):
 
             final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
             final_graph_id_df = final_graph_id_df[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
+            final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id', 'graph_id'])
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
             logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])
 
@@ -651,10 +650,10 @@ class EnsGraphDB(object):
 
         end = time.time()
         ts_delta = end - start
-        logging.info("run loading job[%s]  end at: %s", \
+        logging.info("run loading job[%s] end at: %s", \
                     ens_loading_job_name,
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
-        logging.info("run loading job[%s]  cost: %d", ens_loading_job_name, ts_delta)
+        logging.info("run loading job[%s] cost: %d", ens_loading_job_name, ts_delta)
 
     def dumps_to_graphdb(self):
         try:
@@ -678,3 +677,5 @@ if __name__ == '__main__':
     logger.InitLogger(config)
 
     EnsGraphDB().process_ensname_identity_graph()
+    EnsGraphDB().save_graph_id()
+    # EnsGraphDB().run_loading_job()
