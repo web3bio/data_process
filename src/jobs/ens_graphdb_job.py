@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 00:28:11
+LastEditTime: 2024-09-29 00:52:47
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -226,7 +226,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null order by id LIMIT 1000" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
@@ -314,12 +314,20 @@ class EnsGraphDB(object):
             # merge final_df with allocation_df for both `ens_unique_id` and `ethereum_unique_id`
 
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                    left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('_ens', ''))
+                    left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('', '_ens'))
 
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                     left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
+            
             logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
-            final_df.drop(columns=['unique_id_ens', 'unique_id_ethereum'], inplace=True)
+            # ['ens_unique_id', 'ethereum_unique_id', 'name', 'resolved_address',
+            # 'unique_id', 'graph_id', 'updated_nanosecond', 'unique_id_ethereum',
+            # 'graph_id_ethereum', 'updated_nanosecond_ethereum']
+            final_df.drop(columns=['unique_id', 'unique_id_ethereum'], inplace=True)
+            final_df = final_df.rename(columns={
+                'graph_id': 'graph_id_ens',
+                'updated_nanosecond': 'updated_nanosecond_ens'
+            })
 
             logging.debug("Start combine_logic...")
             final_df[
