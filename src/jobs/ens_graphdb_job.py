@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-28 23:16:07
+LastEditTime: 2024-09-29 00:10:36
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -39,6 +39,36 @@ from psycopg2.extras import execute_values, execute_batch
 
 import setting
 from utils.timeutils import get_unix_milliconds
+
+
+def combine_logic(row):
+    ens_graph_id = row['graph_id_ens']
+    ens_updated_ns = row['updated_nanosecond_ens']
+    eth_graph_id = row['graph_id_ethereum']
+    eth_updated_ns = row['updated_nanosecond_ethereum']
+
+    if pd.notna(ens_graph_id) and pd.notna(eth_graph_id):
+        # Case 1: Both exist
+        if ens_graph_id == eth_graph_id:
+            return ens_graph_id, int(ens_updated_ns), eth_graph_id, int(eth_updated_ns), "both_exist_and_same"
+        else:
+            return eth_graph_id, int(eth_updated_ns), eth_graph_id, int(eth_updated_ns), "both_exist_but_use_ethereum_graph_id"
+
+    elif pd.notna(ens_graph_id) and pd.isna(eth_graph_id):
+        # Case 2: ens_unique_id exists but ethereum_unique_id does not exist
+        new_graph_id = str(uuid.uuid4())
+        current_time_ns = int(get_unix_milliconds())
+        return new_graph_id, current_time_ns, new_graph_id, current_time_ns, "only_ens_exist_use_new_graph_id"
+
+    elif pd.isna(ens_graph_id) and pd.notna(eth_graph_id):
+        # Case 3: ethereum_unique_id exists but ens_unique_id does not exist
+        return eth_graph_id, int(eth_updated_ns), eth_graph_id, int(eth_updated_ns), "only_ethereum_exist_use_ethereum_graph_id"
+
+    else:
+        # Case 4: Neither exist
+        new_graph_id = str(uuid.uuid4())
+        current_time_ns = int(get_unix_milliconds())
+        return new_graph_id, current_time_ns, new_graph_id, current_time_ns, "both_missing"
 
 
 class EnsGraphDB(object):
@@ -200,7 +230,7 @@ class EnsGraphDB(object):
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
-            logging.debug("Successfully load table ensname")
+            logging.debug("Successfully load table ensname row_count: %d" % ensnames_df.shape[0])
 
             # Check if 'is_wrapped' is True, then replace 'owner' with 'wrapped_owner'
             ensnames_df.loc[ensnames_df['is_wrapped'] == True, 'owner'] = ensnames_df['wrapped_owner']
@@ -225,7 +255,7 @@ class EnsGraphDB(object):
 
             identities_df = pd.concat([name_df, ethereum_df])
             identities_df.to_csv(identities_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", identities_path)
+            logging.debug("Successfully save %s row_count: %d", identities_path, identities_df.shape[0])
 
             # Hold.csv
             hold_df = ensnames_df[ensnames_df['owner'].notna()]
@@ -236,7 +266,7 @@ class EnsGraphDB(object):
             hold_grouped['level'] = 5
             hold_df = hold_grouped[['from', 'to', 'source', 'level']]
             hold_df.to_csv(hold_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", hold_path)
+            logging.debug("Successfully save %s row_count: %d", hold_path, hold_df.shape[0])
 
             # Resolve.csv
             resolve_df = ensnames_df[ensnames_df['resolved_address'].notna()]
@@ -247,7 +277,7 @@ class EnsGraphDB(object):
             resolve_grouped['level'] = 5
             resolve_df = resolve_grouped[['from', 'to', 'source', 'level']]
             resolve_df.to_csv(resolve_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", resolve_path)
+            logging.debug("Successfully save %s row_count: %d", resolve_path, resolve_df.shape[0])
 
             # Reverse.csv
             reverse_resolve_df = ensnames_df[ensnames_df['reverse_address'].notna()]
@@ -258,7 +288,7 @@ class EnsGraphDB(object):
             reverse_grouped['level'] = 5
             reverse_resolve_df = reverse_grouped[['from', 'to', 'source', 'level']]
             reverse_resolve_df.to_csv(reverse_resolve_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", reverse_resolve_path)
+            logging.debug("Successfully save %s row_count: %d", reverse_resolve_path, reverse_resolve_df.shape[0])
 
             # Loading graph_id allocation table
             graph_id_table = "graph_id"
@@ -267,7 +297,7 @@ class EnsGraphDB(object):
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             allocation_df = pd.DataFrame(rows, columns=columns)
-            logging.debug("Successfully load table graph_id")
+            logging.debug("Successfully load table graph_id row_count: %d", allocation_df.shape[0])
 
             # only resolved_address == owner can add to identity_graph, otherwise ens just `Hold`
             filter_df = ensnames_df[(ensnames_df['owner'].notna()) &
@@ -280,82 +310,29 @@ class EnsGraphDB(object):
             filter_df['ethereum_unique_id'] = "ethereum," + filter_df['resolved_address']
             final_df = filter_df[['ens_unique_id', 'ethereum_unique_id', 'name', 'resolved_address']]
 
-            final_df.loc[:, 'ens_graph_id'] = None
-            final_df.loc[:, 'ens_updated_nanosecond'] = None
-            final_df.loc[:, 'ethereum_graph_id'] = None
-            final_df.loc[:, 'ethereum_updated_nanosecond'] = None
+            logging.debug("Start merge final_df row_count: %d and allocation_df row_count: %d", final_df.shape[0], allocation_df.shape[0])
+            # merge final_df with allocation_df for both `ens_unique_id` and `ethereum_unique_id`
+            final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
+                    left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('', '_ens'))
+            final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
+                    left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
+            logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
+            final_df.drop(columns=['unique_id', 'unique_id_ens', 'unique_id_ethereum'], inplace=True)
 
-            # Merge to find graph_id and updated_nanosecond for ens_unique_id
-            merged_ens = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                                  left_on='ens_unique_id', right_on='unique_id', how='left')
-            # Merge to find graph_id and updated_nanosecond for ethereum_unique_id
-            merged_ethereum = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                                       left_on='ethereum_unique_id', right_on='unique_id', how='left')
+            logging.debug("Start combine_logic...")
+            final_df[
+                [
+                    'ens_graph_id',
+                    'ens_updated_nanosecond',
+                    'ethereum_graph_id',
+                    'ethereum_updated_nanosecond',
+                    'combine_type'
+            ]] = final_df.apply(combine_logic, axis=1, result_type="expand")
+            logging.debug("End combine_logic...")
 
-            logging.debug("Successfully merge ensname and allocation graph_id")
-            # Reset indexes to ensure alignment
-            final_df = final_df.reset_index(drop=True)
-            merged_ens = merged_ens.reset_index(drop=True)
-            merged_ethereum = merged_ethereum.reset_index(drop=True)
-
-            for idx, row in final_df.iterrows():
-                ens_graph_id = merged_ens.loc[idx, 'graph_id']
-                ens_updated_ns = merged_ens.loc[idx, 'updated_nanosecond']
-
-                eth_graph_id = merged_ethereum.loc[idx, 'graph_id']
-                eth_updated_ns = merged_ethereum.loc[idx, 'updated_nanosecond']
-
-                # Case 1: Both ens_unique_id and ethereum_unique_id exist
-                if pd.notna(ens_graph_id) and pd.notna(eth_graph_id):
-                    if ens_graph_id == eth_graph_id:
-                        # Both have the same graph_id and updated_nanosecond
-                        final_df.loc[idx, 'ens_graph_id'] = ens_graph_id
-                        final_df.loc[idx, 'ens_updated_nanosecond'] = int(ens_updated_ns)
-                        final_df.loc[idx, 'ethereum_graph_id'] = eth_graph_id
-                        final_df.loc[idx, 'ethereum_updated_nanosecond'] = int(eth_updated_ns)
-                        final_df.loc[idx, 'combine_type'] = "both_exist_and_same"
-                    else:
-                        # Different graph_ids: update ens_unique_id to match ethereum_unique_id
-                        final_df.loc[idx, 'ens_graph_id'] = eth_graph_id
-                        final_df.loc[idx, 'ens_updated_nanosecond'] = int(eth_updated_ns)
-                        final_df.loc[idx, 'ethereum_graph_id'] = eth_graph_id
-                        final_df.loc[idx, 'ethereum_updated_nanosecond'] = int(eth_updated_ns)
-                        final_df.loc[idx, 'combine_type'] = "both_exist_but_use_eth_graph_id"
-
-                # Case 2: ens_unique_id exists but ethereum_unique_id does not exist
-                elif pd.notna(ens_graph_id) and pd.isna(eth_graph_id):
-                    new_graph_id = str(uuid.uuid4())
-                    current_time_ns = int(get_unix_milliconds())
-
-                    # Generate new for ethereum_unique_id and set both to the same
-                    final_df.loc[idx, 'ethereum_graph_id'] = new_graph_id
-                    final_df.loc[idx, 'ethereum_updated_nanosecond'] = current_time_ns
-                    final_df.loc[idx, 'ens_graph_id'] = new_graph_id
-                    final_df.loc[idx, 'ens_updated_nanosecond'] = current_time_ns
-                    final_df.loc[idx, 'combine_type'] = "only_ens_exist_use_new_graph_id"
-
-                # Case 3: ethereum_unique_id exists but ens_unique_id does not exist
-                elif pd.isna(ens_graph_id) and pd.notna(eth_graph_id):
-                    # Update ens_unique_id to match ethereum_unique_id's graph_id and updated_nanosecond
-                    final_df.loc[idx, 'ens_graph_id'] = eth_graph_id
-                    final_df.loc[idx, 'ens_updated_nanosecond'] = int(eth_updated_ns)
-                    final_df.loc[idx, 'ethereum_graph_id'] = eth_graph_id
-                    final_df.loc[idx, 'ethereum_updated_nanosecond'] = int(eth_updated_ns)
-                    final_df.loc[idx, 'combine_type'] = "only_ethereum_exist_use_eth_graph_id"
-
-                # Case 4: Neither exist, create new graph_id and updated_nanosecond for both
-                elif pd.isna(ens_graph_id) and pd.isna(eth_graph_id):
-                    new_graph_id = str(uuid.uuid4())
-                    current_time_ns = int(get_unix_milliconds())
-                    # Generate new for two and set both to the same
-                    final_df.loc[idx, 'ens_graph_id'] = new_graph_id
-                    final_df.loc[idx, 'ens_updated_nanosecond'] = current_time_ns
-                    final_df.loc[idx, 'ethereum_graph_id'] = new_graph_id
-                    final_df.loc[idx, 'ethereum_updated_nanosecond'] = current_time_ns
-                    final_df.loc[idx, 'combine_type'] = "both_missing"
-
+            # select relevant columns
             final_df = final_df[['combine_type', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond',
-                                 'ens_unique_id', 'ens_graph_id', 'ens_updated_nanosecond', 'name', 'resolved_address']]
+                                'ens_unique_id', 'ens_graph_id', 'ens_updated_nanosecond', 'name', 'resolved_address']]
 
             identities_graph_df = final_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']].copy()
             identities_graph_df = identities_graph_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']]
@@ -366,7 +343,7 @@ class EnsGraphDB(object):
                 'ethereum_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", identities_graph_path)
+            logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 
             partof_ethereum = final_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
             partof_ethereum = partof_ethereum[['ethereum_unique_id', 'ethereum_graph_id']]
@@ -388,7 +365,7 @@ class EnsGraphDB(object):
 
             part_of_identities_graph_df = pd.concat([partof_ensname, partof_ethereum])
             part_of_identities_graph_df.to_csv(part_of_identities_graph_path, sep='\t', index=False)
-            logging.debug("Successfully save %s", part_of_identities_graph_path)
+            logging.debug("Successfully save %s row_count: %d", part_of_identities_graph_path, part_of_identities_graph_df.shape[0])
 
             # Filter out rows where combine_type is "both_exist_and_same"
             ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
@@ -410,9 +387,9 @@ class EnsGraphDB(object):
                 'ens_updated_nanosecond': 'updated_nanosecond'
             })
 
-            allocation_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
-            allocation_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
-            logging.debug("Successfully save %s", allocation_path)
+            final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
+            final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
+            logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])
 
         except Exception as ex:
             logging.exception(ex)

@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-28 22:39:23
+LastEditTime: 2024-09-29 00:11:01
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -84,7 +84,7 @@ if __name__ == "__main__":
             id='farcaster_process_job'
         )
         farcaster_extras_job_trigger = CronTrigger(
-            year="*", month="*", day="*", hour="16", minute="30", second="0"
+            year="*", month="*", day="*", hour="18", minute="30", second="0"
         )
         scheduler.add_job(
             farcaster_extras_job,
