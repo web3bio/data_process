@@ -33,6 +33,7 @@ CREATE INDEX ensname_label_index ON ensname (label_name);
 CREATE INDEX ensname_owner_index ON ensname (owner);
 CREATE INDEX ensname_resolved_index ON ensname (resolved_address);
 CREATE INDEX ensname_reverse_index ON ensname (reverse_address);
+CREATE INDEX ensname_wrapped_owner_index ON ensname (wrapped_owner);
 
 
 BEGIN;

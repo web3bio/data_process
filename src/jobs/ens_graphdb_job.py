@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 04:55:43
+LastEditTime: 2024-09-29 19:28:10
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -46,41 +46,48 @@ def isolate_logic(row):
     ethereum_updated_ns = row['updated_nanosecond']
     if pd.notna(ethereum_graph_id):
         # Case 1: exist
-        return ethereum_graph_id, int(ethereum_updated_ns), "exist"
+        return ethereum_graph_id, int(ethereum_updated_ns)
     elif pd.isna(ethereum_graph_id):
         # Case 2: ethereum_unique_id does not exist
         new_graph_id = str(uuid.uuid4())
         current_time_ns = int(get_unix_milliconds())
-        return new_graph_id, current_time_ns, "missing"
+        return new_graph_id, current_time_ns
+
+def generate_new_graph_id(row):
+    graph_id_ethereum = row['graph_id_ethereum']
+    updated_nanosecond_ethereum = row['updated_nanosecond_ethereum']
+    if pd.isna(graph_id_ethereum):
+        new_graph_id = str(uuid.uuid4())
+        current_time_ns = int(get_unix_milliconds())
+        return new_graph_id, current_time_ns, False
+    else:
+        return graph_id_ethereum, updated_nanosecond_ethereum, True
+
 
 def combine_logic(row):
-    ens_graph_id = row['graph_id_ens']
-    ens_updated_ns = row['updated_nanosecond_ens']
-    eth_graph_id = row['graph_id_ethereum']
-    eth_updated_ns = row['updated_nanosecond_ethereum']
+    '''
+    description:
+    # Case 1: Both exist
+    # Case 2: ens_unique_id exists but ethereum_unique_id does not exist
+    # Case 3: ethereum_unique_id exists but ens_unique_id does not exist
+    # Case 4: Neither exist
+    '''
+    graph_id_ens = row['graph_id_ens']
+    updated_ns_ens = row['updated_nanosecond_ens']
+    # new_eth_graph_id always exists because we generate(new or exist) before
+    new_eth_graph_id = row['new_ethereum_graph_id']
+    new_eth_updated_ns = row['new_ethereum_updated_nanosecond']
 
-    if pd.notna(ens_graph_id) and pd.notna(eth_graph_id):
+    if pd.notna(graph_id_ens) and pd.notna(new_eth_graph_id):
         # Case 1: Both exist
-        if ens_graph_id == eth_graph_id:
-            return ens_graph_id, int(ens_updated_ns), eth_graph_id, int(eth_updated_ns), "both_exist_and_same"
+        if graph_id_ens == new_eth_graph_id:
+            return graph_id_ens, int(updated_ns_ens), new_eth_graph_id, int(new_eth_updated_ns), "both_exist_and_same"
         else:
-            return eth_graph_id, int(eth_updated_ns), eth_graph_id, int(eth_updated_ns), "both_exist_but_use_ethereum_graph_id"
+            return new_eth_graph_id, int(new_eth_updated_ns), new_eth_graph_id, int(new_eth_updated_ns), "both_exist_but_use_ethereum_graph_id"
 
-    elif pd.notna(ens_graph_id) and pd.isna(eth_graph_id):
-        # Case 2: ens_unique_id exists but ethereum_unique_id does not exist
-        new_graph_id = str(uuid.uuid4())
-        current_time_ns = int(get_unix_milliconds())
-        return new_graph_id, current_time_ns, new_graph_id, current_time_ns, "only_ens_exist_use_new_graph_id"
-
-    elif pd.isna(ens_graph_id) and pd.notna(eth_graph_id):
+    elif pd.isna(graph_id_ens) and pd.notna(new_eth_graph_id):
         # Case 3: ethereum_unique_id exists but ens_unique_id does not exist
-        return eth_graph_id, int(eth_updated_ns), eth_graph_id, int(eth_updated_ns), "only_ethereum_exist_use_ethereum_graph_id"
-
-    else:
-        # Case 4: Neither exist
-        new_graph_id = str(uuid.uuid4())
-        current_time_ns = int(get_unix_milliconds())
-        return new_graph_id, current_time_ns, new_graph_id, current_time_ns, "both_missing"
+        return new_eth_graph_id, int(new_eth_updated_ns), new_eth_graph_id, int(new_eth_updated_ns), "only_ethereum_exist_use_ethereum_graph_id"
 
 
 class EnsGraphDB(object):
@@ -213,7 +220,7 @@ class EnsGraphDB(object):
             read_conn.close()
 
     def process_ensname_identity_graph(self):
-        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname")
+        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname_test")
         if not os.path.exists(graphdb_process_dirs):
             os.makedirs(graphdb_process_dirs)
 
@@ -238,7 +245,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null order by id limit 3000" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
@@ -259,6 +266,7 @@ class EnsGraphDB(object):
             ethereum_df['platform'] = 'ethereum'
             ethereum_df['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             ethereum_df = ethereum_df[['primary_id', 'platform', 'identity', 'update_time']]
+            ethereum_df = ethereum_df[ethereum_df['identity'] != '0x0000000000000000000000000000000000000000']
             ethereum_df = ethereum_df.drop_duplicates(subset=['identity'], keep='last')
 
             name_df = ensnames_df[['name']].copy()
@@ -317,55 +325,24 @@ class EnsGraphDB(object):
             allocation_df = pd.DataFrame(rows, columns=columns)
             logging.debug("Successfully load table graph_id row_count: %d", allocation_df.shape[0])
 
-            # isolate vertex
-            # owner not null resolved_address is null, reverse_address is null:
-            # only owner can apply a graph_id
-            owner_filter_df = ensnames_df[
-                (ensnames_df['owner'].notna()) &
-                (ensnames_df['resolved_address'].isna()) &
-                (ensnames_df['reverse_address'].isna()) &
-                (ensnames_df['owner'] != "0x0000000000000000000000000000000000000000")]
-            owner_filter_df = owner_filter_df[['owner']].copy()
-            owner_isolate_df = owner_filter_df.drop_duplicates(subset=['owner'], keep='first')
-            owner_isolate_df['ethereum_unique_id'] = owner_isolate_df.apply(lambda x: f"ethereum,{x['owner']}", axis=1)
-            # Merge result columns: ['owner', 'ethereum_unique_id', 'unique_id', 'graph_id', 'updated_nanosecond']
-            owner_isolate_df = pd.merge(owner_isolate_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                    left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
-            # After apply(isolate_logic) columns: 
-            # ['owner', 'ethereum_unique_id', 'unique_id', 'graph_id',
-            # 'updated_nanosecond', 'ethereum_graph_id',
-            # 'ethereum_updated_nanosecond', 'combine_type']
-            owner_isolate_df[[
-                'ethereum_graph_id',
-                'ethereum_updated_nanosecond',
-                'combine_type'
-            ]] = owner_isolate_df.apply(isolate_logic, axis=1, result_type="expand")
-            owner_isolate_df = owner_isolate_df[['owner', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond', 'combine_type']]
-            owner_isolate_df = owner_isolate_df[owner_isolate_df['combine_type'] != "exist"]
-            logging.debug("Successfully filter owner_isolate_df row_count: %d", owner_isolate_df.shape[0])
+            # generate new graph_id or use existing graph_id in allocation_df
+            ethereum_merge_df = ethereum_df[['platform', 'identity']].copy()
+            ethereum_merge_df['ethereum_unique_id'] = ethereum_merge_df.apply(lambda x: f"{x['platform']},{x['identity']}", axis=1)
+            ethereum_merge_df = ethereum_merge_df.drop_duplicates(subset=['ethereum_unique_id'],keep='first')
+            ethereum_merge_df = pd.merge(ethereum_merge_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
+                                     left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
+            ethereum_merge_df = ethereum_merge_df.rename(columns={
+                'graph_id': 'graph_id_ethereum',
+                'updated_nanosecond': 'updated_nanosecond_ethereum'
+            })
+            ethereum_merge_df[
+                [
+                    'new_ethereum_graph_id',
+                    'new_ethereum_updated_nanosecond',
+                    'is_exist'
+            ]] = ethereum_merge_df.apply(generate_new_graph_id, axis=1, result_type="expand")
+            logging.debug("Successfully merge ethereum_merge_df and allocation_df row_count: %d", ethereum_merge_df.shape[0])
 
-            # owner not null, resolved_address not null, reverse_address is null:
-            # and owner != resolved_address
-            # only resolved_address can apply a graph_id
-            resolved_filter_df = ensnames_df[
-                (ensnames_df['owner'].notna()) &
-                (ensnames_df['resolved_address'].notna()) &
-                (ensnames_df['reverse_address'].isna()) &
-                (ensnames_df['owner'] != ensnames_df['resolved_address']) &
-                (ensnames_df['resolved_address'] != "0x0000000000000000000000000000000000000000")]
-            resolved_filter_df = resolved_filter_df[['resolved_address']].copy()
-            resolved_isolate_df = resolved_filter_df.drop_duplicates(subset=['resolved_address'], keep='first')
-            resolved_isolate_df['ethereum_unique_id'] = resolved_isolate_df.apply(lambda x: f"ethereum,{x['resolved_address']}", axis=1)
-            resolved_isolate_df = pd.merge(resolved_isolate_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                    left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
-            resolved_isolate_df[[
-                'ethereum_graph_id',
-                'ethereum_updated_nanosecond',
-                'combine_type'
-            ]] = resolved_isolate_df.apply(isolate_logic, axis=1, result_type="expand")
-            resolved_isolate_df = resolved_isolate_df[['resolved_address', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond', 'combine_type']]
-            resolved_isolate_df = resolved_isolate_df[resolved_isolate_df['combine_type'] != "exist"]
-            logging.debug("Successfully filter resolved_isolate_df row_count: %d", resolved_isolate_df.shape[0])
 
             # ensname resolved_address not null, reverse_address not null:
             # and resolved_address == reverse_address
@@ -396,19 +373,15 @@ class EnsGraphDB(object):
 
             final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                     left_on='ens_unique_id', right_on='unique_id', how='left', suffixes=('', '_ens'))
-
-            final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
-                    left_on='ethereum_unique_id', right_on='unique_id', how='left', suffixes=('', '_ethereum'))
-
-            logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
-            # ['ens_unique_id', 'ethereum_unique_id', 'name', 'resolved_address',
-            # 'unique_id', 'graph_id', 'updated_nanosecond', 'unique_id_ethereum',
-            # 'graph_id_ethereum', 'updated_nanosecond_ethereum']
-            final_df.drop(columns=['unique_id', 'unique_id_ethereum'], inplace=True)
             final_df = final_df.rename(columns={
                 'graph_id': 'graph_id_ens',
                 'updated_nanosecond': 'updated_nanosecond_ens'
             })
+
+            final_df = pd.merge(final_df, ethereum_merge_df[['ethereum_unique_id', 'new_ethereum_graph_id', 'new_ethereum_updated_nanosecond']],
+                    left_on='ethereum_unique_id', right_on='ethereum_unique_id', how='left', suffixes=('', '_ethereum'))
+
+            logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
 
             logging.debug("Start combine_logic...")
             final_df[
@@ -425,36 +398,21 @@ class EnsGraphDB(object):
             final_df = final_df[['combine_type', 'ethereum_unique_id', 'ethereum_graph_id', 'ethereum_updated_nanosecond',
                                 'ens_unique_id', 'ens_graph_id', 'ens_updated_nanosecond', 'name', 'resolved_address']]
 
-            identities_graph_df = final_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']].copy()
-            identities_graph_df = identities_graph_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']]
+            identities_graph_df = ethereum_merge_df[['new_ethereum_graph_id', 'new_ethereum_updated_nanosecond']].copy()
             # rename the columns
             identities_graph_df = identities_graph_df.rename(columns={
-                'ethereum_graph_id': 'primary_id',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
+                'new_ethereum_graph_id': 'primary_id',
+                'new_ethereum_updated_nanosecond': 'updated_nanosecond'
             })
+            identities_graph_df = identities_graph_df.drop_duplicates(subset=['primary_id'], keep='first')
+            identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
+            logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 
-            owner_ig_df = owner_isolate_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']].copy()
-            owner_ig_df = owner_ig_df.rename(columns={
-                'ethereum_graph_id': 'primary_id',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
-            })
-            resolved_ig_df = resolved_isolate_df[['ethereum_graph_id', 'ethereum_updated_nanosecond']].copy()
-            resolved_ig_df = resolved_ig_df.rename(columns={
-                'ethereum_graph_id': 'primary_id',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
-            })
-
-            final_identities_graph_df = pd.concat([identities_graph_df, owner_ig_df, resolved_ig_df])
-            final_identities_graph_df = final_identities_graph_df.drop_duplicates(subset=['primary_id'], keep='last')
-            final_identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
-            logging.debug("Successfully save %s row_count: %d", identities_graph_path, final_identities_graph_df.shape[0])
-
-            partof_ethereum = final_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
-            partof_ethereum = partof_ethereum[['ethereum_unique_id', 'ethereum_graph_id']]
+            partof_ethereum = ethereum_merge_df[['ethereum_unique_id', 'new_ethereum_graph_id']].copy()
             # rename the columns
             partof_ethereum = partof_ethereum.rename(columns={
                 'ethereum_unique_id': 'from',
-                'ethereum_graph_id': 'to'
+                'new_ethereum_graph_id': 'to'
             })
 
             partof_ensname = final_df[['ens_unique_id', 'ens_graph_id']].copy()
@@ -465,36 +423,24 @@ class EnsGraphDB(object):
                 'ens_graph_id': 'to'
             })
 
-            owner_partof_ig_df = owner_isolate_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
-            owner_partof_ig_df = owner_partof_ig_df.rename(columns={
-                'ethereum_unique_id': 'from',
-                'ethereum_graph_id': 'to'
-            })
-            resolved_partof_ig_df = resolved_isolate_df[['ethereum_unique_id', 'ethereum_graph_id']].copy()
-            resolved_partof_ig_df = resolved_partof_ig_df.rename(columns={
-                'ethereum_unique_id': 'from',
-                'ethereum_graph_id': 'to'
-            })
-
-            part_of_identities_graph_df = pd.concat([partof_ensname, partof_ethereum, owner_partof_ig_df, resolved_partof_ig_df])
+            part_of_identities_graph_df = pd.concat([partof_ensname, partof_ethereum])
             part_of_identities_graph_df = part_of_identities_graph_df.drop_duplicates(subset=['from', 'to'], keep='last')
             part_of_identities_graph_df.to_csv(part_of_identities_graph_path, sep='\t', index=False)
             logging.debug("Successfully save %s row_count: %d", part_of_identities_graph_path, part_of_identities_graph_df.shape[0])
 
             # Filter out rows where combine_type is "both_exist_and_same"
-            ethereum_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
-            ethereum_part = ethereum_part[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
-            ethereum_part = ethereum_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
-            ethereum_part['platform'] = 'ethereum'
+            ethereum_part = ethereum_merge_df[['is_exist', 'ethereum_unique_id', 'new_ethereum_graph_id', 'platform', 'identity', 'new_ethereum_updated_nanosecond']].copy()
+            ethereum_part = ethereum_part[ethereum_part['is_exist'] == False]
+            ethereum_part = ethereum_part.drop_duplicates(subset=['ethereum_unique_id'], keep='first')
             ethereum_part = ethereum_part.rename(columns={
                 'ethereum_unique_id': 'unique_id',
-                'ethereum_graph_id': 'graph_id',
-                'resolved_address': 'identity',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
+                'new_ethereum_graph_id': 'graph_id',
+                'new_ethereum_updated_nanosecond': 'updated_nanosecond'
             })
+            ethereum_part = ethereum_part[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
 
-            ens_part = final_df[final_df['combine_type'] != "both_exist_and_same"]
-            ens_part = ens_part[['ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
+            ens_part = final_df[['combine_type', 'ens_unique_id', 'ens_graph_id', 'name', 'ens_updated_nanosecond']].copy()
+            ens_part = ens_part[ens_part['combine_type'] != "both_exist_and_same"]
             ens_part = ens_part.drop_duplicates(subset=['ens_unique_id'], keep='last')
             ens_part['platform'] = 'ens'
             ens_part = ens_part.rename(columns={
@@ -503,28 +449,9 @@ class EnsGraphDB(object):
                 'name': 'identity',
                 'ens_updated_nanosecond': 'updated_nanosecond'
             })
+            ens_part = ens_part[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
 
-            owner_isolate_part = owner_isolate_df[['ethereum_unique_id', 'ethereum_graph_id', 'owner', 'ethereum_updated_nanosecond']].copy()
-            owner_isolate_part = owner_isolate_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
-            owner_isolate_part['platform'] = 'ethereum'
-            owner_isolate_part = owner_isolate_part.rename(columns={
-                'ethereum_unique_id': 'unique_id',
-                'ethereum_graph_id': 'graph_id',
-                'owner': 'identity',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
-            })
-
-            resolved_isolate_part = resolved_isolate_df[['ethereum_unique_id', 'ethereum_graph_id', 'resolved_address', 'ethereum_updated_nanosecond']].copy()
-            resolved_isolate_part = resolved_isolate_part.drop_duplicates(subset=['ethereum_unique_id'], keep='last')
-            resolved_isolate_part['platform'] = 'ethereum'
-            resolved_isolate_part = resolved_isolate_part.rename(columns={
-                'ethereum_unique_id': 'unique_id',
-                'ethereum_graph_id': 'graph_id',
-                'resolved_address': 'identity',
-                'ethereum_updated_nanosecond': 'updated_nanosecond'
-            })
-
-            final_graph_id_df = pd.concat([ethereum_part, owner_isolate_part, resolved_isolate_part, ens_part], ignore_index=True)
+            final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
             final_graph_id_df = final_graph_id_df[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
             final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id'], keep='last')
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
