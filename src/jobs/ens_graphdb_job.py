@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 19:28:10
+LastEditTime: 2024-09-30 02:17:53
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -220,7 +220,7 @@ class EnsGraphDB(object):
             read_conn.close()
 
     def process_ensname_identity_graph(self):
-        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname_test")
+        graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/ensname")
         if not os.path.exists(graphdb_process_dirs):
             os.makedirs(graphdb_process_dirs)
 
@@ -245,7 +245,7 @@ class EnsGraphDB(object):
         try:
             ensname = "ensname"
             columns = ['name', 'is_wrapped', 'wrapped_owner', 'owner', 'resolved_address', 'reverse_address']
-            select_sql = "SELECT %s FROM %s WHERE name is not null order by id limit 3000" % (",".join(columns), ensname)
+            select_sql = "SELECT %s FROM %s WHERE name is not null" % (",".join(columns), ensname)
             cursor.execute(select_sql)
             rows = cursor.fetchall()
             ensnames_df = pd.DataFrame(rows, columns=columns)
@@ -453,6 +453,7 @@ class EnsGraphDB(object):
 
             final_graph_id_df = pd.concat([ethereum_part, ens_part], ignore_index=True)
             final_graph_id_df = final_graph_id_df[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
+            final_graph_id_df['updated_nanosecond'] = final_graph_id_df['updated_nanosecond'].astype('int64')
             final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id'], keep='last')
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
             logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])

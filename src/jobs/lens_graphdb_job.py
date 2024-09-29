@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:45
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 19:46:17
+LastEditTime: 2024-09-30 02:06:47
 FilePath: /data_process/src/jobs/lens_graphdb_job.py
 Description: 
 '''
@@ -319,6 +319,8 @@ class LensGraphDB(object):
             lens_part = lens_part[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
 
             final_graph_id_df = pd.concat([ethereum_part, lens_part], ignore_index=True)
+            final_graph_id_df['updated_nanosecond'] = final_graph_id_df['updated_nanosecond'].astype('int64')
+            final_graph_id_df = final_graph_id_df.drop_duplicates(subset=['unique_id'], keep='first')
             final_graph_id_df.to_csv(allocation_path, index=False, quoting=csv.QUOTE_ALL)
             logging.debug("Successfully save %s row_count: %d", allocation_path, final_graph_id_df.shape[0])
 
@@ -509,7 +511,7 @@ class LensGraphDB(object):
             return status
         except Exception as ex:
             raise ex
-    
+
     def run_loading_job(self):
         # POST 'http://hostname:restpp/gsql/v1/loading-jobs/run?graph=SocialGraph'
         # -d '[{"name":"Job_Name","sys.data_root":"/tmp","dataSources":[]}]'
