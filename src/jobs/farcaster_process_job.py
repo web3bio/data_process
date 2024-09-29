@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-13 17:52:55
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-14 23:26:30
+LastEditTime: 2024-09-29 16:34:25
 FilePath: /data_process/src/jobs/farcaster_process_job.py
 Description: 
 '''
@@ -169,7 +169,8 @@ class FarcasterProcess(object):
             # label_name label_name same as fname
             # avatar (fids_df join userdata_df on fid) and when userdata_df.type=1 value is avatar
             # display_name (fids_df join userdata_df on fid) and when userdata_df.type=2 value is display_name
-            # description (fids_df join userdata_df on fid) and when userdata_df.type=2 value is description
+            # description (fids_df join userdata_df on fid) and when userdata_df.type=3 value is description
+            # fname (fids_df join userdata_df on fid) and when userdata_df.type=6 value is fname(primary)
             # custody_address field from fids_df.custody_address
             # network, address from verifications_df.claim and call determine_network
             # create_time field from fids_df.registered_at
@@ -190,6 +191,7 @@ class FarcasterProcess(object):
             avatar_df = userdata_df[(userdata_df['type'] == 1) & (userdata_df['deleted_at'].isnull())].rename(columns={'value': 'avatar'})
             display_name_df = userdata_df[(userdata_df['type'] == 2) & (userdata_df['deleted_at'].isnull())].rename(columns={'value': 'display_name'})
             description_df = userdata_df[(userdata_df['type'] == 3) & (userdata_df['deleted_at'].isnull())].rename(columns={'value': 'description'})
+            primary_fname_df = userdata_df[(userdata_df['type'] == 6) & (userdata_df['deleted_at'].isnull())].rename(columns={'value': 'primary_fname'})
 
             result_df = pd.merge(result_df, display_name_df[['fid', 'display_name', 'deleted_at']], on='fid', how='left', suffixes=('', '_display_name'))
             result_df['display_name'] = result_df.apply(lambda row: None if pd.notnull(row['deleted_at_display_name']) else row['display_name'], axis=1)
@@ -202,6 +204,17 @@ class FarcasterProcess(object):
             result_df = pd.merge(result_df, description_df[['fid', 'description', 'deleted_at']], on='fid', how='left', suffixes=('', '_description'))
             result_df['description'] = result_df.apply(lambda row: None if pd.notnull(row['deleted_at_description']) else row['description'] if row['description'] else None, axis=1)
             result_df = result_df.drop(columns=['deleted_at_description'])
+
+            # Filter primary fname for fname
+            result_df = pd.merge(result_df, primary_fname_df[['fid', 'primary_fname', 'deleted_at']], on='fid', how='left', suffixes=('', '_primary_fname'))
+            result_df['primary_fname'] = result_df.apply(lambda row: None if pd.notnull(row['deleted_at_primary_fname']) else row['primary_fname'] if row['primary_fname'] else None, axis=1)
+            result_df = result_df.drop(columns=['deleted_at_primary_fname'])
+
+            # replace primary fname
+            result_df = result_df[result_df['primary_fname'].notnull()]
+            result_df = result_df.drop(columns=['fname'])
+            result_df = result_df.rename(columns={'primary_fname': 'fname'})
+            result_df = result_df.drop_duplicates(subset=['fid'], keep='first')
 
             result_df['label_name'] = result_df['fname'].apply(lambda x: x.split(".")[0] if pd.notnull(x) else None)
             result_df['custody_address'] = result_df['custody_address'].apply(lambda x: bytea_to_hex_address(x) if x else None)
@@ -231,16 +244,17 @@ class FarcasterProcess(object):
             # select useful columns
             verifications_df = verifications_df[['fid', 'network', 'address', 'timestamp', 'create_time', 'update_time', 'delete_time']]
             # dedup lines
-            deduplicated_df = verifications_df.drop_duplicates(subset=['fid', 'network', 'address'])
+            verifications_df = verifications_df.drop_duplicates(subset=['fid', 'network', 'address'], keep='first')
 
             # keep the first occurrence of data with timestamp
-            tmp_df = deduplicated_df.sort_values(by=['fid', 'timestamp'])
-            tmp_df = tmp_df[tmp_df['delete_time'].isnull()]
-            signer_address_df = tmp_df.drop_duplicates(subset=['fid'], keep='first')
-            signer_address_df = signer_address_df.drop(columns=['timestamp'])
+            profile_address_df = verifications_df[['fid', 'network', 'address', 'timestamp', 'delete_time']].copy()
+            profile_address_df = verifications_df.sort_values(by=['fid', 'timestamp'])
+            profile_address_df = profile_address_df[profile_address_df['delete_time'].isnull()]
+            profile_address_df = profile_address_df.drop_duplicates(subset=['fid'], keep='first')
+            profile_address_df = profile_address_df.drop(columns=['timestamp'])
 
             # signer_address_df join result_df: fill network, address
-            result_df = pd.merge(result_df, signer_address_df[['fid', 'network', 'address']], on='fid', how='left')
+            result_df = pd.merge(result_df, profile_address_df[['fid', 'network', 'address']], on='fid', how='left')
 
             result_df = result_df.sort_values(by='fid')
             # export the result_df to a CSV file
@@ -249,12 +263,14 @@ class FarcasterProcess(object):
                         'registration_time', 'create_time', 'update_time', 'delete_time']]
             result_df.to_csv(farcaster_profile_path, index=False, quoting=csv.QUOTE_ALL)
 
-            deduplicated_df = deduplicated_df.drop(columns=['timestamp'])
-            deduplicated_df = deduplicated_df.sort_values(by='fid')
-            deduplicated_df.to_csv(farcaster_verified_address_path, index=False, quoting=csv.QUOTE_ALL)
+            verifications_df = pd.merge(verifications_df, primary_fname_df[['fid', 'primary_fname']], on='fid', how='left')
+            verifications_df = verifications_df.rename(columns={'primary_fname': 'fname'})
+            verifications_df = verifications_df[['fid', 'fname', 'network', 'address', 'create_time', 'update_time', 'delete_time']]
+            verifications_df = verifications_df.sort_values(by='fid')
+            verifications_df.to_csv(farcaster_verified_address_path, index=False, quoting=csv.QUOTE_ALL)
 
             # TODO: add delete operation
-            delete_verified_df = deduplicated_df[deduplicated_df['delete_time'].notnull()]
+            delete_verified_df = verifications_df[verifications_df['delete_time'].notnull()]
             delete_fname_df = fnames_df[fnames_df['deleted_at'].notnull()]
         except Exception as ex:
             logging.exception(ex)
@@ -284,9 +300,10 @@ class FarcasterProcess(object):
 
         insert_verified_address = """
             INSERT INTO farcaster_verified_address (
-                fid, network, address, create_time, update_time, delete_time
+                fid, fname, network, address, create_time, update_time, delete_time
             ) VALUES %s
             ON CONFLICT (fid, address) DO UPDATE SET
+                fname = EXCLUDED.fname,
                 network = EXCLUDED.network,
                 create_time = EXCLUDED.create_time,
                 update_time = EXCLUDED.update_time,
@@ -361,7 +378,7 @@ class FarcasterProcess(object):
                 custody_address, network, address,
                 registration_time, create_time, update_time, delete_time
             ) VALUES %s
-            ON CONFLICT (fid, fname) DO UPDATE SET
+            ON CONFLICT (fid) DO UPDATE SET
                 fname = EXCLUDED.fname,
                 label_name = EXCLUDED.label_name,
                 alias = EXCLUDED.alias,
@@ -547,7 +564,7 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
-    # FarcasterProcess().process_farcaster_extras()
     # FarcasterProcess().process_farcaster_profile()
     # FarcasterProcess().save_farcaster_profile()
-    # FarcasterProcess().save_farcaster_verified_address()
+    FarcasterProcess().save_farcaster_verified_address()
+    # FarcasterProcess().process_farcaster_extras()

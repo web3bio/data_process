@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-29 04:40:50
+LastEditTime: 2024-09-29 16:35:47
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
-        ensname_graphdb_job()
+        # ensname_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")

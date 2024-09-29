@@ -16,18 +16,18 @@ CREATE TABLE farcaster_profile (
     create_time TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     update_time TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     delete_time TIMESTAMP WITHOUT TIME ZONE,
-    CONSTRAINT unique_farcaster_profile UNIQUE (fid, fname)
+    CONSTRAINT unique_farcaster_profile UNIQUE (fid)
 );
 
 CREATE INDEX idx_fc_profile_custody_address ON farcaster_profile (custody_address);
-CREATE INDEX idx_fc_profile_fid ON farcaster_profile (fid);
 CREATE INDEX idx_fc_profile_fname ON farcaster_profile (fname);
 CREATE INDEX idx_fc_profile_label_name ON farcaster_profile (label_name);
-CREATE INDEX idx_fc_profile_address ON farcaster_profile (address);
+CREATE INDEX idx_fc_profile_address ON farcaster_profile (network, address);
 
 CREATE TABLE farcaster_verified_address (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     fid BIGINT NOT NULL,
+    fname VARCHAR(1024),
     network VARCHAR(66) NOT NULL,
     address VARCHAR(66) NOT NULL,
     create_time TIMESTAMP WITHOUT TIME ZONE,
