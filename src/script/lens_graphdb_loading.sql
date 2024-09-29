@@ -1,4 +1,4 @@
-CREATE LOADING JOB Load_Ens FOR GRAPH SocialGraph {
+CREATE LOADING JOB Load_Lens FOR GRAPH SocialGraph {
   LOAD "/home/tigergraph/shared_data/import_graphs/lens/Identities.csv"
     TO VERTEX Identities VALUES($"primary_id", $"primary_id", $"platform", $"identity", $"update_time") USING SEPARATOR="\t", HEADER="true", EOL="\n";
   LOAD "/home/tigergraph/shared_data/import_graphs/lens/IdentitiesGraph.csv"
