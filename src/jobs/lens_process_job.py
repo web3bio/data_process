@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-13 17:53:04
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-14 23:23:47
+LastEditTime: 2024-09-29 19:08:03
 FilePath: /data_process/src/jobs/lens_process_job.py
 Description: 
 '''
@@ -240,6 +240,7 @@ class LensProcess(object):
             result_df['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             # saving profile
+            result_df = result_df[result_df['handle_name'] != '']
             result_df = result_df.sort_values(by='profile_id')
             result_df.to_csv(lens_profile_path, index=False, quoting=csv.QUOTE_ALL)
 
@@ -528,6 +529,6 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
+    LensProcess().process_lens_profile()
+    LensProcess().save_lens_profile()
     # LensProcess().process_lens_extras()
-    # LensProcess().process_lens_profile()
-    # LensProcess().save_lens_profile()
