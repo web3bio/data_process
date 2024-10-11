@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-26 16:48:23
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-30 02:17:53
+LastEditTime: 2024-10-12 02:55:06
 FilePath: /data_process/src/jobs/ens_graphdb_job.py
 Description: 
 '''
@@ -61,7 +61,7 @@ def generate_new_graph_id(row):
         current_time_ns = int(get_unix_milliconds())
         return new_graph_id, current_time_ns, False
     else:
-        return graph_id_ethereum, updated_nanosecond_ethereum, True
+        return graph_id_ethereum, int(updated_nanosecond_ethereum), True
 
 
 def combine_logic(row):
@@ -405,6 +405,8 @@ class EnsGraphDB(object):
                 'new_ethereum_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df = identities_graph_df.drop_duplicates(subset=['primary_id'], keep='first')
+            # to int
+            identities_graph_df['updated_nanosecond'] = identities_graph_df['updated_nanosecond'].astype('int64')
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
             logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 

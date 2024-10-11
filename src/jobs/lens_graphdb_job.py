@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:45
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 00:03:34
+LastEditTime: 2024-10-12 02:55:42
 FilePath: /data_process/src/jobs/lens_graphdb_job.py
 Description: 
 '''
@@ -269,6 +269,7 @@ class LensGraphDB(object):
                 'ethereum_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df = identities_graph_df.drop_duplicates(subset=['primary_id'], keep='first')
+            identities_graph_df['updated_nanosecond'] = identities_graph_df['updated_nanosecond'].astype('int64')
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
             logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 

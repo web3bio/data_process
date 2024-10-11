@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:44
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 02:09:38
+LastEditTime: 2024-10-12 02:55:21
 FilePath: /data_process/src/jobs/clusters_graphdb_job.py
 Description: 
 '''
@@ -48,7 +48,7 @@ def generate_new_graph_id(row):
         current_time_ns = int(get_unix_milliconds())
         return new_graph_id, current_time_ns, False
     else:
-        return graph_id_address, updated_nanosecond_address, True
+        return graph_id_address, int(updated_nanosecond_address), True
 
 def assign_graph_id(group):
     '''
@@ -79,7 +79,7 @@ def assign_graph_id(group):
 
     # Step 4: Assign the final graph_id and updated_nanosecond to the entire group
     group['final_graph_id'] = final_graph_id
-    group['final_updated_nanosecond'] = final_updated_nanosecond
+    group['final_updated_nanosecond'] = int(final_updated_nanosecond)
 
     return group
 
@@ -276,6 +276,7 @@ class ClustersGraphDB(object):
                 'final_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df = identities_graph_df.drop_duplicates(subset=['primary_id'], keep='first')
+            identities_graph_df['updated_nanosecond'] = identities_graph_df['updated_nanosecond'].astype('int64')
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
             logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 
