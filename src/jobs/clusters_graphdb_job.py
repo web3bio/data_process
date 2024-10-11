@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:44
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 01:07:24
+LastEditTime: 2024-10-12 02:09:38
 FilePath: /data_process/src/jobs/clusters_graphdb_job.py
 Description: 
 '''
@@ -50,24 +50,39 @@ def generate_new_graph_id(row):
     else:
         return graph_id_address, updated_nanosecond_address, True
 
+def assign_graph_id(group):
+    '''
+    description:
+        # group by clusters_unique_id
+        # merged_df = 
+        ['clusters_unique_id', 'address_unique_id', 'cluster_name', 'network',
+        'address', 'unique_id', 'graph_id_clusters',
+        'updated_nanosecond_clusters', 'new_address_graph_id',
+        'new_address_updated_nanosecond']
+    '''
+    sorted_address_pairs = group[['new_address_graph_id', 'new_address_updated_nanosecond']].sort_values(by='new_address_updated_nanosecond')
 
-def combine_logic(row):
-    graph_id_clusters = row['graph_id_clusters']
-    updated_ns_clusters = row['updated_nanosecond_clusters']
-    # new_eth_graph_id always exists because we generate(new or exist) before
-    new_address_graph_id = row['new_address_graph_id']
-    new_address_updated_ns = row['new_address_updated_nanosecond']
+    # Select the smallest new_address pair as the default
+    final_graph_id = sorted_address_pairs['new_address_graph_id'].iloc[0]
+    final_updated_nanosecond = sorted_address_pairs['new_address_updated_nanosecond'].iloc[0]
 
-    if pd.notna(graph_id_clusters) and pd.notna(new_address_graph_id):
-        # Case 1: Both exist
-        if graph_id_clusters == new_address_graph_id:
-            return graph_id_clusters, int(updated_ns_clusters), new_address_graph_id, int(new_address_updated_ns), "both_exist_and_same"
-        else:
-            return new_address_graph_id, int(new_address_updated_ns), new_address_graph_id, int(new_address_updated_ns), "both_exist_but_use_address_graph_id"
+    # Check if graph_id_clusters exists and compare it with the smallest address pair
+    if pd.notna(group['graph_id_clusters']).any():
+        # If graph_id_clusters exists, we check the corresponding updated_nanosecond_clusters
+        clusters_graph_id = group['graph_id_clusters'].dropna().iloc[0]
+        clusters_updated_ns = group['updated_nanosecond_clusters'].dropna().iloc[0]
 
-    elif pd.isna(graph_id_clusters) and pd.notna(new_address_graph_id):
-        # Case 3: address_graph_id exists but clusters_graph_id does not exist
-        return new_address_graph_id, int(new_address_updated_ns), new_address_graph_id, int(new_address_updated_ns), "only_address_exist_use_address_graph_id"
+        # If the farcaster updated_nanosecond is smaller, replace both graph_id and updated_nanosecond
+        if clusters_updated_ns < final_updated_nanosecond:
+            final_graph_id = clusters_graph_id
+            final_updated_nanosecond = clusters_updated_ns
+
+    # Step 4: Assign the final graph_id and updated_nanosecond to the entire group
+    group['final_graph_id'] = final_graph_id
+    group['final_updated_nanosecond'] = final_updated_nanosecond
+
+    return group
+
 
 class ClustersGraphDB(object):
     def __init__(self):
@@ -206,7 +221,7 @@ class ClustersGraphDB(object):
             clusters_df['address_unique_id'] = clusters_df.apply(lambda x: f"{x['network']},{x['address']}", axis=1)
 
             logging.debug("Start merge clusters_df row_count: %d and allocation_df row_count: %d", clusters_df.shape[0], allocation_df.shape[0])
-            # generate new graph_id or use existing graph_id in allocation_df
+            # Create unique ids for farcaster and address
             clusters_address_df = clusters_df[['address_unique_id']].copy()
             clusters_address_df = clusters_address_df.drop_duplicates(subset=['address_unique_id'],keep='first')
             clusters_address_df = pd.merge(clusters_address_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
@@ -224,57 +239,58 @@ class ClustersGraphDB(object):
             ]] = clusters_address_df.apply(generate_new_graph_id, axis=1, result_type="expand")
             logging.debug("Successfully merge clusters_address_df and allocation_df row_count: %d", clusters_address_df.shape[0])
 
-            final_df = clusters_df[['clusters_unique_id', 'address_unique_id', 'cluster_name', 'network', 'address']]
+            merged_df = clusters_df[['clusters_unique_id', 'address_unique_id', 'cluster_name', 'network', 'address']]
 
-            final_df = pd.merge(final_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
+            merged_df = pd.merge(merged_df, allocation_df[['unique_id', 'graph_id', 'updated_nanosecond']],
                     left_on='clusters_unique_id', right_on='unique_id', how='left', suffixes=('', '_clusters'))
-            final_df = final_df.rename(columns={
+            merged_df = merged_df.rename(columns={
                 'graph_id': 'graph_id_clusters',
                 'updated_nanosecond': 'updated_nanosecond_clusters'
             })
-            final_df = pd.merge(final_df, clusters_address_df[['address_unique_id', 'new_address_graph_id', 'new_address_updated_nanosecond']],
+            merged_df = pd.merge(merged_df, clusters_address_df[['address_unique_id', 'new_address_graph_id', 'new_address_updated_nanosecond']],
                     left_on='address_unique_id', right_on='address_unique_id', how='left', suffixes=('', '_address'))
 
-            logging.debug("Successfully merge final_df and allocation_df to final_df row_count: %d", final_df.shape[0])
+            logging.debug("Successfully merge merged_df and allocation_df to final_df row_count: %d", merged_df.shape[0])
 
-            logging.debug("Start combine_logic...")
-            final_df[
-                [
-                    'clusters_graph_id',
-                    'clusters_updated_nanosecond',
-                    'address_graph_id',
-                    'address_updated_nanosecond',
-                    'combine_type'
-            ]] = final_df.apply(combine_logic, axis=1, result_type="expand")
-            logging.debug("End combine_logic...")
+
+            logging.debug("Start assign_graph_id...")
+            final_df = merged_df.groupby('clusters_unique_id').apply(assign_graph_id).reset_index(drop=True)
+            logging.debug("End assign_graph_id...")
+            logging.debug("Successfully genrate final_df row_count: %d", final_df.shape[0])
+
+            # final_df columns:
+            # ['clusters_unique_id', 'address_unique_id', 'cluster_name', 'network',
+            # 'address', 'unique_id', 'graph_id_clusters',
+            # 'updated_nanosecond_clusters', 'new_address_graph_id',
+            # 'new_address_updated_nanosecond', 'final_graph_id',
+            # 'final_updated_nanosecond']
 
             # select relevant columns
-            final_df = final_df[['combine_type', 'address_unique_id', 'address_graph_id', 'address_updated_nanosecond',
-                                'clusters_unique_id', 'clusters_graph_id', 'clusters_updated_nanosecond',
-                                'cluster_name', 'network', 'address']]
+            final_df = final_df[['clusters_unique_id', 'address_unique_id', 'cluster_name', 'network',
+                                'address', 'final_graph_id', 'final_updated_nanosecond']]
 
-            identities_graph_df = final_df[['address_graph_id', 'address_updated_nanosecond']].copy()
+            identities_graph_df = final_df[['final_graph_id', 'final_updated_nanosecond']].copy()
             # rename the columns
             identities_graph_df = identities_graph_df.rename(columns={
-                'address_graph_id': 'primary_id',
-                'address_updated_nanosecond': 'updated_nanosecond'
+                'final_graph_id': 'primary_id',
+                'final_updated_nanosecond': 'updated_nanosecond'
             })
             identities_graph_df = identities_graph_df.drop_duplicates(subset=['primary_id'], keep='first')
             identities_graph_df.to_csv(identities_graph_path, sep='\t', index=False)
             logging.debug("Successfully save %s row_count: %d", identities_graph_path, identities_graph_df.shape[0])
 
-            partof_address = final_df[['address_unique_id', 'address_graph_id']].copy()
+            partof_address = final_df[['address_unique_id', 'final_graph_id']].copy()
             # rename the columns
             partof_address = partof_address.rename(columns={
                 'address_unique_id': 'from',
-                'address_graph_id': 'to'
+                'final_graph_id': 'to'
             })
 
-            partof_clusters = final_df[['clusters_unique_id', 'clusters_graph_id']].copy()
+            partof_clusters = final_df[['clusters_unique_id', 'final_graph_id']].copy()
             # rename the columns
             partof_clusters = partof_clusters.rename(columns={
                 'clusters_unique_id': 'from',
-                'clusters_graph_id': 'to'
+                'final_graph_id': 'to'
             })
 
             part_of_identities_graph_df = pd.concat([partof_clusters, partof_address])
@@ -284,27 +300,25 @@ class ClustersGraphDB(object):
             logging.debug("Successfully save %s row_count: %d", part_of_identities_graph_path, part_of_identities_graph_df.shape[0])
 
             # Filter out rows where combine_type is "both_exist_and_same"
-            address_part = final_df[['combine_type', 'address_unique_id', 'address_graph_id', 'network', 'address', 'address_updated_nanosecond']].copy()
-            address_part = address_part[address_part['combine_type'] != "both_exist_and_same"]
+            address_part = final_df[['address_unique_id', 'final_graph_id', 'network', 'address', 'final_updated_nanosecond']].copy()
             address_part = address_part.drop_duplicates(subset=['address_unique_id'], keep='first')
             address_part = address_part.rename(columns={
                 'address_unique_id': 'unique_id',
-                'address_graph_id': 'graph_id',
+                'final_graph_id': 'graph_id',
                 'network': 'platform',
                 'address': 'identity',
-                'address_updated_nanosecond': 'updated_nanosecond'
+                'final_updated_nanosecond': 'updated_nanosecond'
             })
             address_part = address_part[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
 
-            cluster_part = final_df[['combine_type', 'clusters_unique_id', 'clusters_graph_id', 'cluster_name', 'clusters_updated_nanosecond']].copy()
-            cluster_part = cluster_part[cluster_part['combine_type'] != "both_exist_and_same"]
+            cluster_part = final_df[['clusters_unique_id', 'final_graph_id', 'cluster_name', 'final_updated_nanosecond']].copy()
             cluster_part = cluster_part.drop_duplicates(subset=['clusters_unique_id'], keep='first')
             cluster_part['platform'] = 'clusters'
             cluster_part = cluster_part.rename(columns={
                 'clusters_unique_id': 'unique_id',
-                'clusters_graph_id': 'graph_id',
+                'final_graph_id': 'graph_id',
                 'cluster_name': 'identity',
-                'clusters_updated_nanosecond': 'updated_nanosecond'
+                'final_updated_nanosecond': 'updated_nanosecond'
             })
             cluster_part = cluster_part[['unique_id', 'graph_id', 'platform', 'identity', 'updated_nanosecond']]
 
@@ -331,7 +345,7 @@ class ClustersGraphDB(object):
         graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/clusters")
         if not os.path.exists(graphdb_process_dirs):
             raise FileNotFoundError(f"No directory {graphdb_process_dirs}")
-        
+
         # allocation
         allocation_path = os.path.join(graphdb_process_dirs, "graph_id.csv")
         if not os.path.exists(allocation_path):
