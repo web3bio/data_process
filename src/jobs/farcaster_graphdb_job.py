@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:32
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-30 02:13:24
+LastEditTime: 2024-10-11 23:55:32
 FilePath: /data_process/src/jobs/farcaster_graphdb_job.py
 Description: 
 '''

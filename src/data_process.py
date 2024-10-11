@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-11 22:37:09
+LastEditTime: 2024-10-12 01:20:46
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -29,6 +29,7 @@ from jobs.clusters_process_job import ClustersProcess
 from jobs.ens_graphdb_job import EnsGraphDB
 from jobs.lens_graphdb_job import LensGraphDB
 from jobs.farcaster_graphdb_job import FarcasterGraphDB
+from jobs.clusters_graphdb_job import ClustersGraphDB
 
 
 def farcaster_process_job():
@@ -51,6 +52,10 @@ def ensname_process_job():
     logging.info("Starting ensname_process_job...")
     ENSProcess().process_pipeline()
 
+def clusters_process_job():
+    logging.info("Starting clusters_process_job job...")
+    ClustersProcess().process_pipeline()
+
 def ensname_graphdb_job():
     logging.info("Starting ensname_graphdb_job...")
     EnsGraphDB().dumps_to_graphdb()
@@ -63,9 +68,10 @@ def farcaster_graphdb_job():
     logging.info("Starting farcaster_graphdb_job...")
     FarcasterGraphDB().dumps_to_graphdb()
 
-def clusters_process_job():
-    logging.info("Starting clusters_process_job job...")
-    ClustersProcess().process_pipeline()
+def clusters_graphdb_job():
+    logging.info("Starting clusters_graphdb_job...")
+    ClustersGraphDB().dumps_to_graphdb()
+
 
 if __name__ == "__main__":
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
@@ -107,6 +113,17 @@ if __name__ == "__main__":
         )
         # Farcaster Job End
 
+        # Clusters Job Start
+        clusters_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="18", minute="0", second="0"
+        )
+        scheduler.add_job(
+            clusters_process_job,
+            trigger=clusters_process_job_trigger,
+            id='clusters_process_job'
+        )
+        # Clusters Job End
+
         # Lens Job Start
         lens_process_job_trigger = CronTrigger(
             year="*", month="*", day="*", hour="6", minute="0", second="0"
@@ -129,7 +146,7 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
-        clusters_process_job()
+        clusters_graphdb_job()
         # farcaster_graphdb_job()
         # ensname_graphdb_job()
         # lens_graphdb_job()

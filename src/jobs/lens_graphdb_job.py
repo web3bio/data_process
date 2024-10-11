@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:45
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-30 02:06:47
+LastEditTime: 2024-10-12 00:03:34
 FilePath: /data_process/src/jobs/lens_graphdb_job.py
 Description: 
 '''
@@ -104,7 +104,7 @@ class LensGraphDB(object):
         finally:
             cursor.close()
             conn.close()
-    
+
     def process_lens_identity_graph(self):
         graphdb_process_dirs = os.path.join(setting.Settings["datapath"], "tigergraph/import_graphs/lens")
         if not os.path.exists(graphdb_process_dirs):
