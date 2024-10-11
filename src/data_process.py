@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 01:20:46
+LastEditTime: 2024-10-12 02:10:15
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -146,10 +146,10 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
+        farcaster_graphdb_job()
         clusters_graphdb_job()
-        # farcaster_graphdb_job()
-        # ensname_graphdb_job()
-        # lens_graphdb_job()
+        ensname_graphdb_job()
+        lens_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")
