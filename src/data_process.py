@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-11 21:51:55
+LastEditTime: 2024-10-11 22:37:09
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -30,8 +30,6 @@ from jobs.ens_graphdb_job import EnsGraphDB
 from jobs.lens_graphdb_job import LensGraphDB
 from jobs.farcaster_graphdb_job import FarcasterGraphDB
 
-
-allow_clusters_process_checkpoint = False
 
 def farcaster_process_job():
     logging.info("Starting farcaster_process_job...")
@@ -66,17 +64,8 @@ def farcaster_graphdb_job():
     FarcasterGraphDB().dumps_to_graphdb()
 
 def clusters_process_job():
-    global allow_clusters_process_checkpoint
-    clusters_process_checkpoint = 0
-    if allow_clusters_process_checkpoint is True:
-        clusters_process_checkpoint = 1706797485
-        logging.info("Starting clusters_process_job(check_point={}) job...".format(clusters_process_checkpoint))
-        ClustersProcess().process_pipeline(check_point=clusters_process_checkpoint)
-        clusters_process_checkpoint = 0
-        allow_clusters_process_checkpoint = False
-    else:
-        logging.info("Starting clusters_process_job job...")
-        ClustersProcess().process_pipeline(check_point=0)
+    logging.info("Starting clusters_process_job job...")
+    ClustersProcess().process_pipeline()
 
 if __name__ == "__main__":
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))

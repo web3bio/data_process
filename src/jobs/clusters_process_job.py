@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:32
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-11 21:48:10
+LastEditTime: 2024-10-11 23:03:26
 FilePath: /data_process/src/jobs/clusters_process_job.py
 Description: 
 '''
@@ -81,7 +81,7 @@ class ClustersProcess(object):
     def __init__(self):
         self.job_name = "clusters_process_job"
         self.job_type = "cron"
-    
+
     def update_extras_job_status(self, job_status, check_point=0):
         extras_job_name = "clusters_extras_job"
         extras_job_name_type = "cron"
@@ -267,7 +267,7 @@ class ClustersProcess(object):
         else:
             logging.debug("No valid Clusters delete_data to process.")
 
-    def process_clusters_profile(self, latest_timestamp=0):
+    def process_clusters_profile(self):
         clusters_profile_dirs = os.path.join(setting.Settings["datapath"], "clusters_process")
         if not os.path.exists(clusters_profile_dirs):
             os.makedirs(clusters_profile_dirs)
@@ -279,9 +279,6 @@ class ClustersProcess(object):
 
         url = "{}/v0.1/events".format(setting.CLUSTERS["api"])
         fromTimestamp = 0
-        if latest_timestamp != 0:
-            fromTimestamp = latest_timestamp
-
         all_count = 0
         batch_count = 0
         max_batch_limit = 65536
@@ -616,6 +613,8 @@ class ClustersProcess(object):
             axis=1
         )
 
+        merged_df = merged_df[merged_df["cluster_name"].notnull()]
+        merged_df = merged_df.drop_duplicates(subset=['cluster_id', 'address', 'address_type', 'cluster_name'], keep='last')
         merged_df = merged_df.sort_values(by='cluster_id')
         merged_df = merged_df[[
             "cluster_id", "bytes32_address", "network", "address", "address_type", "is_verified", \
@@ -628,23 +627,109 @@ class ClustersProcess(object):
                       time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
         logging.info("processing clusters_profile cost: %d", ts_delta)
 
-    def process_pipeline(self, check_point=0):
-        try:
-            latest_timestamp = 0
-            if check_point == 0:
-                # latest_timestamp = self.get_latest_timestamp() + 1
-                latest_timestamp = 0
-            else:
-                latest_timestamp = check_point
-            # self.update_job_status("start", latest_timestamp)
-            self.process_clusters_profile(latest_timestamp)
+    def save_clusters_profile(self, dump_batch_size=10000):
+        clusters_profile_dirs = os.path.join(setting.Settings["datapath"], "clusters_process")
+        if not os.path.exists(clusters_profile_dirs):
+            raise FileNotFoundError(f"No data directory {clusters_profile_dirs}")
 
-            # self.update_job_status("running", latest_timestamp)
-            # self.update_job_status("end", latest_timestamp)
+        clusters_profile_path = os.path.join(clusters_profile_dirs, "clusters_profile.csv")
+        if not os.path.exists(clusters_profile_path):
+            raise FileNotFoundError(f"No data path {clusters_profile_path}")
+        start = time.time()
+        logging.info("saving clusters_profile start at: %s", \
+                      time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start)))
+
+        insert_clusters_profile = """
+        INSERT INTO clusters_profile (
+            cluster_id,
+            bytes32_address,
+            network,
+            address,
+            address_type,
+            is_verified,
+            cluster_name,
+            name,
+            registration_time,
+            create_time,
+            update_time,
+            delete_time
+        ) VALUES %s
+        ON CONFLICT (cluster_id, address, address_type, cluster_name)
+        DO UPDATE SET
+            bytes32_address = EXCLUDED.bytes32_address,
+            network = EXCLUDED.network,
+            is_verified = EXCLUDED.is_verified,
+            name = EXCLUDED.name,
+            registration_time = EXCLUDED.registration_time,
+            create_time = EXCLUDED.create_time,
+            update_time = EXCLUDED.update_time,
+            delete_time = EXCLUDED.delete_time;
+        """
+
+        write_conn = psycopg2.connect(setting.PG_DSN["write"])
+        write_conn.autocommit = True
+        cursor = write_conn.cursor()
+
+        cnt = 0
+        batch = []
+        batch_times = 0
+        try:
+            # Loading `clusters_profile`
+            with open(clusters_profile_path, 'r', encoding="utf-8") as csvfile:
+                csv_reader = csv.reader(csvfile)
+                header = next(csv_reader)  # Skip the header
+                logging.info("[%s] header: %s", clusters_profile_path, header)
+                batch = []
+                for row in csv_reader:
+                    cnt += 1
+                    # convert empty strings to None except for 'clusters_id'
+                    row = [None if (col == "" and idx != 0) else col for idx, col in enumerate(row)]
+                    if row[6] is None:
+                        # index: 6 is `cluster_name``
+                        continue
+                    batch.append(row)
+                    if len(batch) >= dump_batch_size:
+                        # bulk insert
+                        batch_times += 1
+                        execute_values(
+                            cursor, insert_clusters_profile, batch, template=None, page_size=dump_batch_size
+                        )
+                        logging.info("Upserted[cluster_profile] batch with size [%d], batch_times %d", len(batch), batch_times)
+                        batch = []
+
+                # remaining
+                if batch:
+                    batch_times += 1
+                    execute_values(
+                        cursor, insert_clusters_profile, batch, template=None, page_size=len(batch)
+                    )
+                    logging.info("Upserted[cluster_profile] batch with size [%d], batch_times %d", len(batch), batch_times)
+            os.rename(clusters_profile_path, clusters_profile_path + ".finished")
 
         except Exception as ex:
             logging.exception(ex)
-            # self.update_job_status("fail", latest_timestamp)
+            raise ex
+        finally:
+            cursor.close()
+            write_conn.close()
+
+        end = time.time()
+        ts_delta = end - start
+        logging.info("saving clusters_profile end at: %s", \
+                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end)))
+        logging.info("saving clusters_profile cost: %d", ts_delta)
+
+    def process_pipeline(self):
+        try:
+            # self.update_job_status("start")
+            self.process_clusters_profile()
+            self.save_clusters_profile()
+            # self.update_job_status("running")
+            # self.update_job_status("end")
+
+        except Exception as ex:
+            logging.exception(ex)
+            # self.update_job_status("fail")
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
@@ -656,4 +741,4 @@ if __name__ == '__main__':
 
     # ClustersProcess().get_latest_timestamp()
 
-    ClustersProcess().process_pipeline(check_point=0)
+    ClustersProcess().process_pipeline()
