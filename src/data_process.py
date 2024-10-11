@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-30 02:17:21
+LastEditTime: 2024-10-11 21:51:55
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -24,11 +24,14 @@ import setting.filelogger as logger
 from jobs.farcaster_process_job import FarcasterProcess
 from jobs.lens_process_job import LensProcess
 from jobs.ens_process_job import ENSProcess
+from jobs.clusters_process_job import ClustersProcess
 
 from jobs.ens_graphdb_job import EnsGraphDB
 from jobs.lens_graphdb_job import LensGraphDB
 from jobs.farcaster_graphdb_job import FarcasterGraphDB
 
+
+allow_clusters_process_checkpoint = False
 
 def farcaster_process_job():
     logging.info("Starting farcaster_process_job...")
@@ -62,6 +65,18 @@ def farcaster_graphdb_job():
     logging.info("Starting farcaster_graphdb_job...")
     FarcasterGraphDB().dumps_to_graphdb()
 
+def clusters_process_job():
+    global allow_clusters_process_checkpoint
+    clusters_process_checkpoint = 0
+    if allow_clusters_process_checkpoint is True:
+        clusters_process_checkpoint = 1706797485
+        logging.info("Starting clusters_process_job(check_point={}) job...".format(clusters_process_checkpoint))
+        ClustersProcess().process_pipeline(check_point=clusters_process_checkpoint)
+        clusters_process_checkpoint = 0
+        allow_clusters_process_checkpoint = False
+    else:
+        logging.info("Starting clusters_process_job job...")
+        ClustersProcess().process_pipeline(check_point=0)
 
 if __name__ == "__main__":
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
@@ -125,9 +140,10 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
-        farcaster_graphdb_job()
-        ensname_graphdb_job()
-        lens_graphdb_job()
+        clusters_process_job()
+        # farcaster_graphdb_job()
+        # ensname_graphdb_job()
+        # lens_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")

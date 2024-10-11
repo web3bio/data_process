@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:06:43
 LastEditors: Zella Zhong
-LastEditTime: 2024-09-28 21:55:28
+LastEditTime: 2024-10-11 13:15:39
 FilePath: /data_process/src/setting/__init__.py
 Description: 
 '''
@@ -56,6 +56,11 @@ LENS = {
     "api_key": "",
 }
 
+CLUSTERS = {
+    "api": "",
+    "api_key": "",
+}
+
 
 def load_dsn(config_file):
     """
@@ -84,6 +89,7 @@ def load_settings(env="development"):
     global CHAINBASE
     global NEYNAR
     global LENS
+    global CLUSTERS
 
     config_file = "/app/config/production.toml"
     if env is not None:
@@ -121,6 +127,10 @@ def load_settings(env="development"):
     LENS = {
         "api": config["lens"]["api"],
         "api_key": config["lens"]["api_key"],
+    }
+    CLUSTERS = {
+        "api": config["clusters"]["api"],
+        "api_key": config["clusters"]["api_key"],
     }
     TIGERGRAPH_SETTINGS = {
         "host": config["tdb"]["host"],

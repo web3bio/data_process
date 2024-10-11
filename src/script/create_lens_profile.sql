@@ -22,6 +22,7 @@ CREATE TABLE lensv2_profile (
     CONSTRAINT unique_lensv2_profile UNIQUE (profile_id)
 );
 
+CREATE INDEX idx_lensv2_profile_name ON lensv2_profile (name);
 CREATE INDEX idx_lensv2_profile_handle_name ON lensv2_profile (handle_name);
 CREATE INDEX idx_lensv2_profile_label_name ON lensv2_profile (label_name);
 CREATE INDEX idx_lensv2_profile_address ON lensv2_profile (address);
