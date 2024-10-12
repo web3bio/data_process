@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:32
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-11 23:54:37
+LastEditTime: 2024-10-12 14:36:03
 FilePath: /data_process/src/jobs/clusters_process_job.py
 Description: 
 '''
@@ -55,7 +55,7 @@ def address_type_to_network(address_type):
     elif address_type == "solana":
         network = "solana"
     elif address_type == "dogecoin":
-        network = "doge"
+        network = "dogecoin"
     elif address_type == "near":
         network = "near"
     elif address_type == "stacks":
