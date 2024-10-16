@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:44
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 02:55:21
+LastEditTime: 2024-10-16 15:09:29
 FilePath: /data_process/src/jobs/clusters_graphdb_job.py
 Description: 
 '''
@@ -605,3 +605,4 @@ if __name__ == '__main__':
     # ClustersProcess().get_latest_timestamp()
 
     ClustersGraphDB().process_clusters_identity_graph()
+    # ClustersGraphDB().save_graph_id()

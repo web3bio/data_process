@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 14:38:09
+LastEditTime: 2024-10-16 15:09:38
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -146,8 +146,8 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
-        clusters_process_job()
-        clusters_graphdb_job()
+        # clusters_process_job()
+        # clusters_graphdb_job()
         # farcaster_graphdb_job()
         # clusters_graphdb_job()
         # ensname_graphdb_job()

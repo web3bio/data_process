@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-11 12:06:32
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 14:36:03
+LastEditTime: 2024-10-12 15:51:07
 FilePath: /data_process/src/jobs/clusters_process_job.py
 Description: 
 '''
@@ -721,15 +721,15 @@ class ClustersProcess(object):
 
     def process_pipeline(self):
         try:
-            # self.update_job_status("start")
+            self.update_job_status("start")
             self.process_clusters_profile()
             self.save_clusters_profile()
-            # self.update_job_status("running")
-            # self.update_job_status("end")
+            self.update_job_status("running")
+            self.update_job_status("end")
 
         except Exception as ex:
             logging.exception(ex)
-            # self.update_job_status("fail")
+            self.update_job_status("fail")
 
 if __name__ == '__main__':
     from dotenv import load_dotenv
