@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 18:31:37
+LastEditTime: 2024-10-17 20:48:21
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -129,6 +129,17 @@ if __name__ == "__main__":
         )
         # Clusters Job End
 
+        # Basenames Job Start
+        basenames_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="13", minute="0", second="0"
+        )
+        scheduler.add_job(
+            basenames_process_job,
+            trigger=basenames_process_job_trigger,
+            id='basenames_process_job'
+        )
+        # Basenames Job End
+
         # Lens Job Start
         lens_process_job_trigger = CronTrigger(
             year="*", month="*", day="*", hour="6", minute="0", second="0"
@@ -152,7 +163,7 @@ if __name__ == "__main__":
 
         # testing job
         # fetch some history data from 2024-09-19 - 2024-10-01
-        basenames_process_job()
+        # basenames_process_job()
         # clusters_process_job()
         # clusters_graphdb_job()
         # farcaster_graphdb_job()

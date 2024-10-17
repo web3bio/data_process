@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 20:39:33
+LastEditTime: 2024-10-17 20:45:22
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -55,10 +55,8 @@ COIN_TYPE_ETH = "60"
 basenames_transactions_query_rawdata_by_block = "690222"
 basenames_transactions_query_count_by_block = "690223"
 
-
-# 19964505	2024-09-19 03:59:17
-# INITIALIZE_BLOCK_NUMBER = 19964505
-INITIALIZE_BLOCK_NUMBER = 20009505
+# 2024-09-30 23:57:47
+INITIALIZE_BLOCK_NUMBER = 20475660
 
 
 # ETH_NODE The node hash of "eth"
@@ -1750,15 +1748,14 @@ class BasenamesProcess(object):
         conn.autocommit = True
         cursor = conn.cursor()
 
-        # # for refetch block number
-        # start_block_number = self.get_latest_block_from_db(cursor)
-        # if check_point is not None:
-        #     start_block_number = check_point
+        # start_block_number = INITIALIZE_BLOCK_NUMBER
+        # for refetch block number
+        start_block_number = self.get_latest_block_from_db(cursor)
+        if check_point is not None:
+            start_block_number = check_point
 
-        start_block_number = INITIALIZE_BLOCK_NUMBER
-        end_block_number = 20475729  # 2024-10-01 12:00:05
-        # start_block_number = start_block_number - 600
-        # end_block_number = self.get_latest_block_from_rpc()
+        start_block_number = start_block_number - 600
+        end_block_number = self.get_latest_block_from_rpc()
         if end_block_number <= start_block_number:
             logging.info("Basenames transactions online dump failed! Invalid start_block={}, end_block={}".format(
                 start_block_number, end_block_number))
