@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 20:32:27
+LastEditTime: 2024-10-17 20:39:33
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -1178,19 +1178,21 @@ class BasenamesProcess(object):
                                 transactionIndex = r.get("transactionIndex", "0x0")
                                 logIndex = r.get("logIndex", "0x0")
                                 if blockNumber == "0x" or \
-                                    timeStamp == "0x" or \
-                                    transactionIndex == "0x" or \
-                                    logIndex == "0x":
+                                    timeStamp == "0x":
                                     logging.error("invalid row in result = {}".format(json.dumps(r)))
                                     continue
-
+                                
+                                if transactionIndex == "0x":
+                                    transactionIndex = "0x0"
+                                if logIndex == "0x":
+                                    logIndex = "0x0"
                                 # block_number,block_timestamp,transaction_hash,transaction_index,log_index,address,data,topic0,topic1,topic2,topic3
                                 block_number = int(r.get("blockNumber", "0x0"), 16)
                                 block_timestamp = int(r.get("timeStamp", "0x0"), 16)
                                 block_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(block_timestamp))
                                 transaction_hash = r.get("transactionHash", "")
-                                transaction_index = int(r.get("transactionIndex", "0x0"), 16)
-                                log_index = int(r.get("logIndex", "0x0"), 16)
+                                transaction_index = int(transactionIndex, 16)
+                                log_index = int(logIndex, 16)
                                 contract_address = r.get("address", "")
                                 contract_label = LABEL_MAP[contract_address]
                                 input_data = r.get("data", "")
