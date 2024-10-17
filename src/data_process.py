@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-16 15:09:38
+LastEditTime: 2024-10-17 18:31:37
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -25,6 +25,7 @@ from jobs.farcaster_process_job import FarcasterProcess
 from jobs.lens_process_job import LensProcess
 from jobs.ens_process_job import ENSProcess
 from jobs.clusters_process_job import ClustersProcess
+from jobs.basenames_process_job import BasenamesProcess
 
 from jobs.ens_graphdb_job import EnsGraphDB
 from jobs.lens_graphdb_job import LensGraphDB
@@ -55,6 +56,10 @@ def ensname_process_job():
 def clusters_process_job():
     logging.info("Starting clusters_process_job job...")
     ClustersProcess().process_pipeline()
+
+def basenames_process_job():
+    logging.info("Starting basenames_process_job job...")
+    BasenamesProcess().online_dump()
 
 def ensname_graphdb_job():
     logging.info("Starting ensname_graphdb_job...")
@@ -146,6 +151,8 @@ if __name__ == "__main__":
         scheduler.start()
 
         # testing job
+        # fetch some history data from 2024-09-19 - 2024-10-01
+        basenames_process_job()
         # clusters_process_job()
         # clusters_graphdb_job()
         # farcaster_graphdb_job()
