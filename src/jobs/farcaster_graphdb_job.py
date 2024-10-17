@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:32
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 02:55:34
+LastEditTime: 2024-10-16 21:37:07
 FilePath: /data_process/src/jobs/farcaster_graphdb_job.py
 Description: 
 '''
@@ -643,6 +643,6 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
-    # FarcasterGraphDB().process_farcaster_identity_graph()
-    FarcasterGraphDB().save_graph_id()
+    FarcasterGraphDB().process_farcaster_identity_graph()
+    # FarcasterGraphDB().save_graph_id()
     # FarcasterGraphDB().run_loading_job()

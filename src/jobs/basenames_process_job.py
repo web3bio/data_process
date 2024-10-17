@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 16:11:24
+LastEditTime: 2024-10-17 18:30:34
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -47,7 +47,7 @@ import setting
 
 # day seconds
 DAY_SECONDS = 24 * 60 * 60
-PER_COUNT = 1000
+PER_COUNT = 5000
 MAX_RETRY_TIMES = 3
 
 COIN_TYPE_ETH = "60"
@@ -99,6 +99,7 @@ LABEL_MAP = {
     L2Resolver: "Basenames: L2 Resolver",
 }
 
+# Reverse Registrar 0x79ea96012eea67a83431f1701b3dff7e37f9e282
 BASE_REVERSE_CLAIMED = "0x94a5ce4d9c1b6f48709de92cd4f882a72e6c496245ed1f72edbfcce4a46f0b37"
 
 # Registry 0xb94704422c2a1e396835a571837aa5ae53285a95
@@ -150,6 +151,14 @@ METHOD_MAP = {
     ADDR_CHANGED: "AddrChanged(node,address)",
     NAME_CHANGED: "NameChanged(node,name)",
     CONTENTHASH_CHANGED: "ContenthashChanged(node,hash)"
+}
+
+TOPIC_MAP = {
+    ReverseRegistrar: [BASE_REVERSE_CLAIMED],
+    Registry: [NEW_OWNER, NEW_RESOLVER],
+    RegistrarController: [NAME_REGISTERED_WITH_NAME],
+    BaseRegistrar: [TRANSFER, NAME_REGISTERED_WITH_RECORD, NAME_REGISTERED_WITH_ID],
+    L2Resolver: [TEXT_CHANGED, ADDRESS_CHANGED, ADDR_CHANGED, NAME_CHANGED, CONTENTHASH_CHANGED]
 }
 
 
@@ -931,7 +940,7 @@ class BasenamesProcess(object):
         record_df['block_unix'] = record_df["block_timestamp"].view('int64')//10**9
         return record_df
 
-    def save_txlogs_storage(self, upsert_data, cursor):
+    def save_txlogs_storage(self, upsert_data, cursor, batch_count=1000):
         sql_statement = """INSERT INTO public.basenames_txlogs (
             block_number,
             block_timestamp,
@@ -953,13 +962,16 @@ class BasenamesProcess(object):
             decoded = EXCLUDED.decoded;
         """
         if upsert_data:
-            try:
-                execute_values(cursor, sql_statement, upsert_data)
-                logging.info(f"Basenames save_txlogs_storage. upsert_data count={len(upsert_data)}")
-            except Exception as ex:
-                error_msg = traceback.format_exc()
-                raise Exception("Caught exception during insert records in {}, sql={}, values={}".format(
-                    error_msg, sql_statement, json.dumps(upsert_data)))
+            batch_times = math.ceil(len(upsert_data) / batch_count)
+            for i in range(0, batch_times):
+                batch_upsert_data = upsert_data[i * batch_count: (i+1) * batch_count]
+                try:
+                    execute_values(cursor, sql_statement, batch_upsert_data)
+                    logging.info(f"Basenames save_txlogs_storage. upsert_data count={len(batch_upsert_data)}")
+                except Exception as ex:
+                    error_msg = traceback.format_exc()
+                    raise Exception("Caught exception during insert records in {}, sql={}, values={}".format(
+                        error_msg, sql_statement, json.dumps(batch_upsert_data)))
 
     def save_basenames(self, upsert_data, cursor):
         for namenode, record in upsert_data.items():
@@ -1107,113 +1119,147 @@ class BasenamesProcess(object):
         fetch_all_count = 0
 
         session = Session()
-        adapter = LimiterAdapter(per_day=100000, per_minute=65, per_second=1)
+        adapter = LimiterAdapter(per_day=100000, per_minute=60, per_second=1)
         session.mount(setting.CHAIN_RPC["base"]["api"], adapter)
-        block_split = 20000
+        block_split = 50000
         try:
             times = math.ceil((end_block - start_block) / block_split)
             for i in range(0, times):
+                logging.info("query global_start_block={}, global_end_block={}, block_split={} times={}/{}".format(
+                    start_block, end_block, block_split, i, times))
                 upsert_data = []
                 batch_start_block = start_block + i * block_split
-                end_start_block = min(int(batch_start_block + block_split), end_block)
-                query_params = {
-                    "queryParameters": {
-                        "start_block": str(start_block),
-                        "end_block": str(end_block),
-                        "custom_offset": str(offset),
-                        "custom_limit": str(PER_COUNT),
-                    }
-                }
-                record_result = fetch_txlogs_by_block_with_retry(session, headers, query_params)
-                logging.info(record_result)
-                if record_result["code"] != 200:
-                    err_msg = "Chainbase fetch failed: code:[{}], message[{}], query_params={}".format(
-                        record_result["code"], record_result["message"], json.dumps(query_params))
-                    raise Exception(err_msg)
-
-                if "data" in record_result:
-                    query_execution_id = record_result["data"].get("execution_id", "")
-                    query_row_count = record_result["data"].get("total_row_count", 0)
-                    query_ts = record_result["data"].get("execution_time_millis", 0)
-                    line_prefix = "Loading Basenames [start_block={}, end_block={}], execution_id=[{}] all_count={}, offset={}, row_count={}, cost: {}".format(
-                        start_block, end_block, query_execution_id, record_count, offset, query_row_count, query_ts / 1000)
-                    logging.info(line_prefix)
-
-                    if "data" in record_result["data"]:
-                        for r in record_result["data"]["data"]:
-                            # block_number,block_timestamp,transaction_hash,transaction_index,log_index,address,data,topic0,topic1,topic2,topic3
-                            block_number = r[0]
-                            block_timestamp = r[1]
-                            transaction_hash = r[2]
-                            transaction_index = r[3]
-                            log_index = r[4]
-                            contract_address = r[5]
-                            contract_label = LABEL_MAP[contract_address]
-                            input_data = r[6]
-                            topic0 = r[7]
-                            topic1 = r[8]
-                            topic2 = r[9]
-                            topic3 = r[10]
-                            method_id = ""
-                            signature = ""
-                            decoded = {}
-                            if topic0 == BASE_REVERSE_CLAIMED:
-                                method_id, signature, decoded = decode_BaseReverseClaimed(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NEW_OWNER:
-                                method_id, signature, decoded = decode_NewOwner(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NEW_RESOLVER:
-                                method_id, signature, decoded = decode_NewResolver(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NAME_REGISTERED_WITH_NAME:
-                                method_id, signature, decoded = decode_NameRegisteredWithName(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NAME_REGISTERED_WITH_RECORD:
-                                method_id, signature, decoded = decode_NameRegisteredWithRecord(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NAME_REGISTERED_WITH_ID:
-                                method_id, signature, decoded = decode_NameRegisteredWithID(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == TRANSFER:
-                                method_id, signature, decoded = decode_Transfer(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == TEXT_CHANGED:
-                                method_id, signature, decoded = decode_TextChanged(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == ADDRESS_CHANGED:
-                                method_id, signature, decoded = decode_AddressChanged(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == ADDR_CHANGED:
-                                method_id, signature, decoded = decode_AddrChanged(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == NAME_CHANGED:
-                                method_id, signature, decoded = decode_NameChanged(input_data, topic0, topic1, topic2, topic3)
-                            elif topic0 == CONTENTHASH_CHANGED:
-                                method_id, signature, decoded = decode_ContenthashChanged(input_data, topic0, topic1, topic2, topic3)
-                            else:
-                                # logging.debug("Loading Basenames [start_block={}, end_block={}] method_id={} Skip".format(start_block, end_block, topic0))
+                batch_end_block = min(int(batch_start_block + block_split), end_block)
+                contract_list = [Registry, BaseRegistrar, RegistrarController, ReverseRegistrar, L2Resolver]
+                for contract in contract_list:
+                    contract_label = LABEL_MAP[contract]
+                    topic0_list = TOPIC_MAP[contract]
+                    for query_topic0 in topic0_list:
+                        query_signature = METHOD_MAP[query_topic0]
+                        contract_query_topic0_count = 0
+                        # Result window is too large, PageNo x Offset size must be less than or equal to 10000
+                        page_count = int(10000 / PER_COUNT)
+                        for page in range(1, page_count + 1):
+                            get_logs_format = "{}?module=logs&action=getLogs&address={}" + \
+                                        "&fromBlock={}&toBlock={}&topic0={}" + \
+                                        "&page={}&offset={}&apikey={}"
+                            query_url = get_logs_format.format(
+                                setting.CHAIN_RPC["base"]["api"], contract,
+                                batch_start_block, batch_end_block, query_topic0,
+                                page, PER_COUNT, setting.CHAIN_RPC["base"]["api_key"]
+                            )
+                            logging.debug("basescan query logs: %s", query_url)
+                            response = session.get(url=query_url, timeout=120)
+                            if response.status_code != 200:
+                                logging.warning("basescan api response failed, url={} {} {}".format(query_url, response.status_code, response.reason))
                                 continue
 
-                            # method_id = r[6] # topic0
-                            # signature = "" # a map
-                            # block_number
-                            # block_timestamp
-                            # transaction_hash
-                            # transaction_index
-                            # log_index
-                            # contract_address # saving contract_label
-                            # method_id
-                            # signature
-                            # decoded
+                            # "status": "1", "message": "OK",
+                            data = json.loads(response.text)
+                            if "status" in data:
+                                if data["status"] != "1":
+                                    logging.warning("basescan api response failed, url={} {} {}".format(
+                                        query_url, data["status"], data.get("message", "")))
+                                    continue
 
-                            write_str = format_str.format(
-                                block_number, block_timestamp, transaction_hash, transaction_index, log_index,
-                                contract_address, contract_label, method_id, signature, json.dumps(decoded))
+                            result = data["result"]
+                            if result is None:
+                                logging.warning("basescan api result is None, url={}".format(query_url))
+                                continue
+                            
+                            if len(result) == 0:
+                                logging.warning("basescan api result is empty, url={}".format(query_url))
+                                continue
+                            
+                            for r in result:
+                                # block_number,block_timestamp,transaction_hash,transaction_index,log_index,address,data,topic0,topic1,topic2,topic3
+                                block_number = int(r.get("blockNumber", "0x0"), 16)
+                                block_timestamp = int(r.get("timeStamp", "0x0"), 16)
+                                block_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(block_timestamp))
+                                transaction_hash = r.get("transactionHash", "")
+                                transaction_index = int(r.get("transactionIndex", "0x0"), 16)
+                                log_index = int(r.get("logIndex", "0x0"), 16)
+                                contract_address = r.get("address", "")
+                                contract_label = LABEL_MAP[contract_address]
+                                input_data = r.get("data", "")
+                                topics = r.get("topics", [])
 
-                            base_ts = time.mktime(time.strptime(block_timestamp, "%Y-%m-%d %H:%M:%S"))
-                            base_day = time.strftime("%Y-%m-%d_%H", time.localtime(base_ts))
-                            data_path = os.path.join(basenames_process, base_day + "_tx_logs")
-                            with open(data_path + ".tsv", 'a+', encoding='utf-8') as data_fw:
-                                data_fw.write(write_str)
+                                topic0 = ""
+                                topic1 = ""
+                                topic2 = ""
+                                topic3 = ""
+                                if len(topics) == 0:
+                                    continue
+                                if len(topics) == 1:
+                                    topic0 = topics[0]
+                                elif len(topics) == 2:
+                                    topic0 = topics[0]
+                                    topic1 = topics[1]
+                                elif len(topics) == 3:
+                                    topic0 = topics[0]
+                                    topic1 = topics[1]
+                                    topic2 = topics[2]
+                                elif len(topics) == 3:
+                                    topic0 = topics[0]
+                                    topic1 = topics[1]
+                                    topic2 = topics[2]
+                                    topic3 = topics[3]
+                                method_id = ""
+                                signature = ""
+                                decoded = {}
 
-                            upsert_data.append((
-                                block_number, block_timestamp, transaction_hash, transaction_index, log_index,
-                                contract_address, contract_label, method_id, signature, json.dumps(decoded)))
-                            fetch_all_count += 1
+                                if topic0 == BASE_REVERSE_CLAIMED:
+                                    method_id, signature, decoded = decode_BaseReverseClaimed(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NEW_OWNER:
+                                    method_id, signature, decoded = decode_NewOwner(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NEW_RESOLVER:
+                                    method_id, signature, decoded = decode_NewResolver(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NAME_REGISTERED_WITH_NAME:
+                                    method_id, signature, decoded = decode_NameRegisteredWithName(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NAME_REGISTERED_WITH_RECORD:
+                                    method_id, signature, decoded = decode_NameRegisteredWithRecord(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NAME_REGISTERED_WITH_ID:
+                                    method_id, signature, decoded = decode_NameRegisteredWithID(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == TRANSFER:
+                                    method_id, signature, decoded = decode_Transfer(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == TEXT_CHANGED:
+                                    method_id, signature, decoded = decode_TextChanged(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == ADDRESS_CHANGED:
+                                    method_id, signature, decoded = decode_AddressChanged(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == ADDR_CHANGED:
+                                    method_id, signature, decoded = decode_AddrChanged(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == NAME_CHANGED:
+                                    method_id, signature, decoded = decode_NameChanged(input_data, topic0, topic1, topic2, topic3)
+                                elif topic0 == CONTENTHASH_CHANGED:
+                                    method_id, signature, decoded = decode_ContenthashChanged(input_data, topic0, topic1, topic2, topic3)
+                                else:
+                                    # logging.debug("Loading Basenames [start_block={}, end_block={}] method_id={} Skip".format(start_block, end_block, topic0))
+                                    continue
+
+                                write_str = format_str.format(
+                                    block_number, block_datetime, transaction_hash, transaction_index, log_index,
+                                    contract_address, contract_label, method_id, signature, json.dumps(decoded))
+
+                                base_day = time.strftime("%Y-%m-%d", time.localtime(block_timestamp))
+                                data_path = os.path.join(basenames_process, base_day + "_tx_logs")
+                                with open(data_path + ".tsv", 'a+', encoding='utf-8') as data_fw:
+                                    data_fw.write(write_str)
+
+                                upsert_data.append((
+                                    block_number, block_datetime, transaction_hash, transaction_index, log_index,
+                                    contract_address, contract_label, method_id, signature, json.dumps(decoded)))
+                                fetch_all_count += 1
+                                contract_query_topic0_count += 1
+
+                            if len(result) < PER_COUNT:
+                                break
+                        
+                        logging.info("block_start={}, block_end={} contract=[{}] topic0=[{}] records count={}".format(
+                            batch_start_block, batch_end_block,
+                            contract_label, query_signature, contract_query_topic0_count))
 
                 self.save_txlogs_storage(upsert_data, cursor)
-                break
+                self.online_transaction_pipeline(batch_start_block, batch_end_block, cursor)
 
         except Exception as ex:
             logging.exception(ex)
@@ -1644,7 +1690,7 @@ class BasenamesProcess(object):
         basenames_process = os.path.join(setting.Settings["datapath"], "basenames_process")
         if not os.path.exists(basenames_process):
             os.makedirs(basenames_process)
-        
+
         block_datetime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))
         record_df = self.read_records_by_block(start_block, end_block, cursor)
         # Sort by block_timestamp
@@ -1654,8 +1700,10 @@ class BasenamesProcess(object):
         logging.info("Basenames process from start_block={} to end_block={} transaction_hash record count={}, start_at={}".format(
             start_block, end_block, len(grouped), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))))
 
+        cnt = 0
         for transaction_hash, group in grouped:
             sorted_group = group.sort_values(by=['transaction_index', 'log_index'])
+            cnt += 1
             try:
                 process_result = self.transaction_process(sorted_group)
                 block_datetime = process_result["block_datetime"]
@@ -1665,15 +1713,16 @@ class BasenamesProcess(object):
                 self.save_basenames_update_record(process_result["upsert_record"], cursor)
                 if is_primary:
                     self.update_primary_name(process_result["set_name_record"], cursor)
-                if is_registered:
-                    logging.debug("Basenames process transaction_hash(is_registered={}) {} Done".format(is_registered, transaction_hash))
+                # if is_registered:
+                logging.debug("Basenames process transaction_hash(is_registered={}) {} cnt={} Done".format(
+                    is_registered, transaction_hash, cnt))
             except Exception as ex:
                 error_msg = traceback.format_exc()
                 base_ts = time.mktime(time.strptime(block_datetime, "%Y-%m-%d %H:%M:%S"))
                 base_day = time.strftime("%Y-%m-%d", time.localtime(base_ts))
                 failed_path = os.path.join(basenames_process, base_day + "_log_pipeline")
                 with open(failed_path + ".fail", 'a+', encoding='utf-8') as fail:
-                    fail.write("Basenames transaction_hash {} error_msg: {}\n".format(transaction_hash, error_msg))
+                    fail.write("Basenames transaction_hash {} {} error_msg: {}\n".format(transaction_hash, cnt, error_msg))
 
         logging.info("Basenames process from start_block={} to end_block={} transaction_hash record count={}, end_at={}".format(
             start_block, end_block, len(grouped), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))))
@@ -1692,8 +1741,7 @@ class BasenamesProcess(object):
         #     start_block_number = check_point
 
         start_block_number = INITIALIZE_BLOCK_NUMBER
-        # end_block_number = 20339804  # 2024-09-27 20:29:15
-        end_block_number = INITIALIZE_BLOCK_NUMBER + 1000
+        end_block_number = 20475729  # 2024-10-01 12:00:05
         # start_block_number = start_block_number - 600
         # end_block_number = self.get_latest_block_from_rpc()
         if end_block_number <= start_block_number:
@@ -1704,7 +1752,7 @@ class BasenamesProcess(object):
         basenames_process = os.path.join(setting.Settings["datapath"], "basenames_process")
         if not os.path.exists(basenames_process):
             os.makedirs(basenames_process)
-        
+
         start = time.time()
         logging.info("Basenames transactions online dump start_block={}, end_block={} start at: {}".format(
             start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start))))
@@ -1715,7 +1763,7 @@ class BasenamesProcess(object):
             ts_delta = end - start
             logging.info("Basenames transactions online dump start_block={}, end_block={} end at: {}".format(
                 start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))))
-            logging.info("Basenames transactions online dump start_block={}, end_block={} record count: {}".format(
+            logging.info("Basenames transactions online dump start_block={}, end_block={} fetch_all_count: {}".format(
                 start_block_number, end_block_number, fetch_all_count))
             logging.info("Basenames transactions online dump start_block={}, end_block={} spends: {}".format(
                 start_block_number, end_block_number, ts_delta))
@@ -1749,7 +1797,7 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
-    # BasenamesProcess().process_pipeline()
-    raw_data = "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000068a70a7f00000000000000000000000000000000000000000000000000000000000000076d75737461666100000000000000000000000000000000000000000000000000"
-    result = decode_NameRegistered_data(raw_data)
-    print(result)
+    BasenamesProcess().process_pipeline()
+    # raw_data = "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000b6465736372697074696f6e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003b4e6f7669636520746f20616c6c20746869732e20486f706520616c6c20676f65732077656c6c2e2048656c70206d65206f75742e205468616e6b730000000000"
+    # result = decode_TextChanged_data(raw_data)
+    # print(result)
