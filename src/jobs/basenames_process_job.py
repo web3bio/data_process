@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 18:30:34
+LastEditTime: 2024-10-17 20:32:27
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -57,7 +57,8 @@ basenames_transactions_query_count_by_block = "690223"
 
 
 # 19964505	2024-09-19 03:59:17
-INITIALIZE_BLOCK_NUMBER = 19964505
+# INITIALIZE_BLOCK_NUMBER = 19964505
+INITIALIZE_BLOCK_NUMBER = 20009505
 
 
 # ETH_NODE The node hash of "eth"
@@ -1172,6 +1173,17 @@ class BasenamesProcess(object):
                                 continue
                             
                             for r in result:
+                                blockNumber = r.get("blockNumber", "0x0")
+                                timeStamp = r.get("timeStamp", "0x0")
+                                transactionIndex = r.get("transactionIndex", "0x0")
+                                logIndex = r.get("logIndex", "0x0")
+                                if blockNumber == "0x" or \
+                                    timeStamp == "0x" or \
+                                    transactionIndex == "0x" or \
+                                    logIndex == "0x":
+                                    logging.error("invalid row in result = {}".format(json.dumps(r)))
+                                    continue
+
                                 # block_number,block_timestamp,transaction_hash,transaction_index,log_index,address,data,topic0,topic1,topic2,topic3
                                 block_number = int(r.get("blockNumber", "0x0"), 16)
                                 block_timestamp = int(r.get("timeStamp", "0x0"), 16)
@@ -1697,8 +1709,9 @@ class BasenamesProcess(object):
         record_df = record_df.sort_values(by='block_timestamp')
         # Group by transaction_hash
         grouped = record_df.groupby('transaction_hash', sort=False)
+        grouped_count = len(grouped)
         logging.info("Basenames process from start_block={} to end_block={} transaction_hash record count={}, start_at={}".format(
-            start_block, end_block, len(grouped), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))))
+            start_block, end_block, grouped_count, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time()))))
 
         cnt = 0
         for transaction_hash, group in grouped:
@@ -1714,8 +1727,8 @@ class BasenamesProcess(object):
                 if is_primary:
                     self.update_primary_name(process_result["set_name_record"], cursor)
                 # if is_registered:
-                logging.debug("Basenames process transaction_hash(is_registered={}) {} cnt={} Done".format(
-                    is_registered, transaction_hash, cnt))
+                logging.debug("Basenames process transaction_hash(is_registered={}) {} cnt={}/{} Done".format(
+                    is_registered, transaction_hash, cnt, grouped_count))
             except Exception as ex:
                 error_msg = traceback.format_exc()
                 base_ts = time.mktime(time.strptime(block_datetime, "%Y-%m-%d %H:%M:%S"))
