@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-18 17:14:44
+LastEditTime: 2024-10-18 18:42:06
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -31,6 +31,7 @@ from jobs.ens_graphdb_job import EnsGraphDB
 from jobs.lens_graphdb_job import LensGraphDB
 from jobs.farcaster_graphdb_job import FarcasterGraphDB
 from jobs.clusters_graphdb_job import ClustersGraphDB
+from jobs.basenames_graphdb_job import BasenamesGraphDB
 
 
 def farcaster_process_job():
@@ -76,6 +77,10 @@ def farcaster_graphdb_job():
 def clusters_graphdb_job():
     logging.info("Starting clusters_graphdb_job...")
     ClustersGraphDB().dumps_to_graphdb()
+
+def basenames_graphdb_job():
+    logging.info("Starting basenames_graphdb_job...")
+    BasenamesGraphDB().dumps_to_graphdb()
 
 
 if __name__ == "__main__":
@@ -129,16 +134,16 @@ if __name__ == "__main__":
         )
         # Clusters Job End
 
-        # # Basenames Job Start
-        # basenames_process_job_trigger = CronTrigger(
-        #     year="*", month="*", day="*", hour="13", minute="0", second="0"
-        # )
-        # scheduler.add_job(
-        #     basenames_process_job,
-        #     trigger=basenames_process_job_trigger,
-        #     id='basenames_process_job'
-        # )
-        # # Basenames Job End
+        # Basenames Job Start
+        basenames_process_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="13", minute="0", second="0"
+        )
+        scheduler.add_job(
+            basenames_process_job,
+            trigger=basenames_process_job_trigger,
+            id='basenames_process_job'
+        )
+        # Basenames Job End
 
         # Lens Job Start
         lens_process_job_trigger = CronTrigger(
@@ -163,13 +168,11 @@ if __name__ == "__main__":
 
         # testing job
         # re-run history data from 2024-09-19 - 2024-10-17
-        basenames_process_job()
-        # clusters_process_job()
-        # clusters_graphdb_job()
         # farcaster_graphdb_job()
         # clusters_graphdb_job()
         # ensname_graphdb_job()
         # lens_graphdb_job()
+        basenames_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")
