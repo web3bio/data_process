@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-17 20:45:22
+LastEditTime: 2024-10-18 17:12:07
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -1531,9 +1531,9 @@ class BasenamesProcess(object):
                     upsert_data[node] = {"namenode": node}
 
                 if texts_key != "":
-                    if "key_value" not in upsert_data[node]:
-                        upsert_data[node]["key_value"] = {}
-                    upsert_data[node]["key_value"][texts_key] = texts_val
+                    if "texts" not in upsert_data[node]:
+                        upsert_data[node]["texts"] = {}
+                    upsert_data[node]["texts"][texts_key] = texts_val
 
                 if node not in upsert_record:
                     upsert_record[node] = {
@@ -1750,12 +1750,15 @@ class BasenamesProcess(object):
 
         # start_block_number = INITIALIZE_BLOCK_NUMBER
         # for refetch block number
-        start_block_number = self.get_latest_block_from_db(cursor)
-        if check_point is not None:
-            start_block_number = check_point
+        # start_block_number = self.get_latest_block_from_db(cursor)
+        # if check_point is not None:
+        #     start_block_number = check_point
 
-        start_block_number = start_block_number - 600
-        end_block_number = self.get_latest_block_from_rpc()
+        # start_block_number = start_block_number - 600
+        # end_block_number = self.get_latest_block_from_rpc()
+
+        start_block_number = 19964505
+        end_block_number = 21206209
         if end_block_number <= start_block_number:
             logging.info("Basenames transactions online dump failed! Invalid start_block={}, end_block={}".format(
                 start_block_number, end_block_number))
@@ -1770,23 +1773,64 @@ class BasenamesProcess(object):
             start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start))))
 
         try:
-            fetch_all_count = self.online_fetch(start_block_number, end_block_number, cursor)
-            end = time.time()
-            ts_delta = end - start
-            logging.info("Basenames transactions online dump start_block={}, end_block={} end at: {}".format(
-                start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))))
-            logging.info("Basenames transactions online dump start_block={}, end_block={} fetch_all_count: {}".format(
-                start_block_number, end_block_number, fetch_all_count))
-            logging.info("Basenames transactions online dump start_block={}, end_block={} spends: {}".format(
-                start_block_number, end_block_number, ts_delta))
+            # fetch_all_count = self.online_fetch(start_block_number, end_block_number, cursor)
+            # end = time.time()
+            # ts_delta = end - start
+            # logging.info("Basenames transactions online dump start_block={}, end_block={} end at: {}".format(
+            #     start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))))
+            # logging.info("Basenames transactions online dump start_block={}, end_block={} fetch_all_count: {}".format(
+            #     start_block_number, end_block_number, fetch_all_count))
+            # logging.info("Basenames transactions online dump start_block={}, end_block={} spends: {}".format(
+            #     start_block_number, end_block_number, ts_delta))
 
-            # self.online_transaction_pipeline(start_block_number, end_block_number, cursor)
+            self.online_transaction_pipeline(start_block_number, end_block_number, cursor)
         except Exception as ex:
             error_msg = traceback.format_exc()
             logging.error("Basenames transactions online dump: Exception occurs error! {}".format(error_msg))
         finally:
             cursor.close()
             conn.close()
+
+    def test_single_transaction(self, tx_hash):
+        conn = psycopg2.connect(setting.PG_DSN["write"])
+        conn.autocommit = True
+        cursor = conn.cursor()
+
+        ssql = """
+            SELECT block_number, block_timestamp, transaction_hash, transaction_index, log_index, contract_address, contract_label, method_id, signature, decoded
+            FROM public.basenames_txlogs
+            WHERE transaction_hash='{}'
+        """
+        cursor.execute(ssql.format(tx_hash))
+        rows = cursor.fetchall()
+        columns = ['block_number', 'block_timestamp', 'transaction_hash', 'transaction_index', 'log_index', 
+               'contract_address', 'contract_label', 'method_id', 'signature', 'decoded']
+        record_df = pd.DataFrame(rows, columns=columns)
+        record_df['block_timestamp'] = pd.to_datetime(record_df['block_timestamp'])
+        record_df['block_unix'] = record_df["block_timestamp"].view('int64')//10**9
+
+        # Sort by block_timestamp
+        record_df = record_df.sort_values(by='block_timestamp')
+        # Group by transaction_hash
+        grouped = record_df.groupby('transaction_hash', sort=False)
+
+        for transaction_hash, group in grouped:
+            sorted_group = group.sort_values(by=['transaction_index', 'log_index'])
+            try:
+                process_result = self.transaction_process(sorted_group)
+                block_datetime = process_result["block_datetime"]
+                is_primary = process_result["is_primary"]
+                is_registered = process_result["is_registered"]
+                print(process_result["upsert_data"])
+                self.save_basenames(process_result["upsert_data"], cursor)
+                self.save_basenames_update_record(process_result["upsert_record"], cursor)
+                if is_primary:
+                    self.update_primary_name(process_result["set_name_record"], cursor)
+                # if is_registered:
+                logging.debug("Basenames process transaction_hash(is_registered={}) {} Done".format(
+                    is_registered, transaction_hash))
+            except Exception as ex:
+                logging.exception(ex)
 
     def process_pipeline(self):
         try:
@@ -1809,7 +1853,7 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
+    txhash = "0xb288da4ff8e6123e2b29b5c5866f46ce5ebf17ef39b46e8a2df347574dfd649f"
+    # BasenamesProcess().test_single_transaction(txhash)
     BasenamesProcess().process_pipeline()
-    # raw_data = "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000000b6465736372697074696f6e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003b4e6f7669636520746f20616c6c20746869732e20486f706520616c6c20676f65732077656c6c2e2048656c70206d65206f75742e205468616e6b730000000000"
-    # result = decode_TextChanged_data(raw_data)
-    # print(result)
+    
