@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-18 18:42:06
+LastEditTime: 2024-10-21 14:33:48
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -172,7 +172,7 @@ if __name__ == "__main__":
         # clusters_graphdb_job()
         # ensname_graphdb_job()
         # lens_graphdb_job()
-        basenames_graphdb_job()
+        # basenames_graphdb_job()
         while True:
             time.sleep(60)
             logging.info("just sleep for nothing")

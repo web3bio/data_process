@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-18 19:17:30
+LastEditTime: 2024-10-21 14:35:12
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -1750,15 +1750,13 @@ class BasenamesProcess(object):
 
         # start_block_number = INITIALIZE_BLOCK_NUMBER
         # for refetch block number
-        # start_block_number = self.get_latest_block_from_db(cursor)
-        # if check_point is not None:
-        #     start_block_number = check_point
+        start_block_number = self.get_latest_block_from_db(cursor)
+        if check_point is not None:
+            start_block_number = check_point
 
-        # start_block_number = start_block_number - 600
-        # end_block_number = self.get_latest_block_from_rpc()
+        start_block_number = start_block_number - 600
+        end_block_number = self.get_latest_block_from_rpc()
 
-        start_block_number = 19964505
-        end_block_number = 21206209
         if end_block_number <= start_block_number:
             logging.info("Basenames transactions online dump failed! Invalid start_block={}, end_block={}".format(
                 start_block_number, end_block_number))
