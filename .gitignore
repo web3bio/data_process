@@ -6,3 +6,4 @@ data
 .history
 src/config/*.toml
 !src/config/main.sample.toml
+sns_process/node_modules/

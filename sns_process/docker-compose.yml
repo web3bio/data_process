@@ -1,0 +1,8 @@
+services:
+  server:
+    image: ghcr.io/web3bio/data_process:main
+    container_name: data_process
+    volumes:
+      - ~/sns_process:/node_app/data
+      - ~/sns_process/.env:/node_app/.env
+      - ~/sns_process/log:/tmp

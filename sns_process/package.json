@@ -1,0 +1,20 @@
+{
+  "name": "sns_process",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --no-deprecation index.js"
+  },
+  "keywords": [],
+  "author": "Zella Zhong <zella@mask.io>",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@bonfida/spl-name-service": "^3.0.3",
+    "bottleneck": "^2.19.5",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.0",
+    "pg-promise": "^11.10.1"
+  }
+}

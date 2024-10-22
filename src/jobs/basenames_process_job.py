@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-21 14:35:12
+LastEditTime: 2024-10-21 14:49:53
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -1851,12 +1851,12 @@ if __name__ == '__main__':
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
     logger.InitLogger(config)
 
-    txhash = "0xb288da4ff8e6123e2b29b5c5866f46ce5ebf17ef39b46e8a2df347574dfd649f"
+    # txhash = "0xb288da4ff8e6123e2b29b5c5866f46ce5ebf17ef39b46e8a2df347574dfd649f"
     # BasenamesProcess().test_single_transaction(txhash)
     # BasenamesProcess().process_pipeline()
 
-    name = 'vault.luc.eth'
-    # name = 'luc.eth'
-    namenode = compute_namehash_nowrapped(name)
-    print(namenode) 
+    # name = 'web3.bio'
+    # # name = 'luc.eth'
+    # namenode = compute_namehash_nowrapped(name)
+    # print(namenode)
     
