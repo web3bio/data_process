@@ -14,7 +14,6 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import readline from 'readline';
 import Bottleneck from 'bottleneck';
-import { N } from 'ethers';
 
 // Load environment variables from the .env file
 dotenv.config();
