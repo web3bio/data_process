@@ -325,9 +325,14 @@ const getDomainInfo = limiter.wrap(async (domain_pubkey) => {
         const { registry, nftOwner } = await NameRegistryState.retrieve(SOLANA_MAIN_CLIENT, pubkey);
         let contenthash = registry.data.toString('utf-8').trim();
         contenthash = contenthash.replace(/\x00+$/, '');
+
+        // Further clean up invalid or problematic characters if necessary
         if (contenthash === '' || /^[\x00]+$/.test(contenthash)) {
             contenthash = null;
+        } else {
+            contenthash = contenthash.replace(/[\0\x00]+/g, ''); // Remove any lingering null bytes
         }
+
         return {
             namenode: pubkey.toBase58(),
             nft_owner: nftOwner ? nftOwner.toBase58() : null,
@@ -355,5 +360,6 @@ const run = async () => {
 // Execute the run function
 run().catch(console.error);
 
-// const result = await getDomainInfo("7yEEEjdSgeGfEGFb7ykEpErZ67ymvMDeofUVcCfKypxF")
-// console.log(result.contenthash.length);
+// const result = await getDomainInfo("9V1N7XtALu2asmUfbSep5P7TZbJoSYxi2ofDUYWwdVCc")
+// console.log(result.owner);
+// console.log(result.contenthash);
