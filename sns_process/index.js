@@ -32,12 +32,20 @@ const db = pg({
 const SOLANA_MAIN_CLIENT = new Connection(process.env.QUICKNODE_RPC);
 
 // Set up bottleneck limiter to control request rate (2 requests per second, 30 requests per minute)
+// const limiter = new Bottleneck({
+//     minTime: 3000, // 1 request every 3 seconds
+//     maxConcurrent: 1, // Only allow 1 concurrent request at a time
+//     reservoir: 30,  // Limit to 30 requests per minute
+//     reservoirRefreshAmount: 30, // Refill 30 tokens
+//     reservoirRefreshInterval: 60 * 1000 // Refresh every minute (60000 ms)
+// });
+
 const limiter = new Bottleneck({
-    minTime: 3000, // 1 request every 3 seconds
+    minTime: 100, // 1 request every 100 milliseconds (10 requests per second)
     maxConcurrent: 1, // Only allow 1 concurrent request at a time
-    reservoir: 30,  // Limit to 30 requests per minute
-    reservoirRefreshAmount: 30, // Refill 30 tokens
-    reservoirRefreshInterval: 60 * 1000 // Refresh every minute (60000 ms)
+    reservoir: 10,  // Limit to 10 requests per second
+    reservoirRefreshAmount: 10, // Refill 10 tokens (requests)
+    reservoirRefreshInterval: 1000 // Refresh every 1 second (1000 ms)
 });
 
 const SOL_TLD = new PublicKey("58PwtjSDuFHuUkYjH9BYnnQKHfwo9reZhC2zMJv9JPkx"); // .sol TLD
