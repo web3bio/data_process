@@ -40,11 +40,19 @@ const SOLANA_MAIN_CLIENT = new Connection(process.env.QUICKNODE_RPC);
 //     reservoirRefreshInterval: 60 * 1000 // Refresh every minute (60000 ms)
 // });
 
+// const limiter = new Bottleneck({
+//     minTime: 100, // 1 request every 100 milliseconds (10 requests per second)
+//     maxConcurrent: 1, // Only allow 1 concurrent request at a time
+//     reservoir: 10,  // Limit to 10 requests per second
+//     reservoirRefreshAmount: 10, // Refill 10 tokens (requests)
+//     reservoirRefreshInterval: 1000 // Refresh every 1 second (1000 ms)
+// });
+
 const limiter = new Bottleneck({
-    minTime: 100, // 1 request every 100 milliseconds (10 requests per second)
+    minTime: 200, // 1 request every 200 milliseconds (5 requests per second)
     maxConcurrent: 1, // Only allow 1 concurrent request at a time
-    reservoir: 10,  // Limit to 10 requests per second
-    reservoirRefreshAmount: 10, // Refill 10 tokens (requests)
+    reservoir: 5,  // Limit to 5 requests per second
+    reservoirRefreshAmount: 5, // Refill 5 tokens (requests)
     reservoirRefreshInterval: 1000 // Refresh every 1 second (1000 ms)
 });
 
