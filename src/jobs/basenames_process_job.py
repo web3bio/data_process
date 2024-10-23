@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-10-16 15:10:34
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-21 14:49:53
+LastEditTime: 2024-10-23 15:20:29
 FilePath: /data_process/src/jobs/basenames_process_job.py
 Description: 
 '''
@@ -1265,7 +1265,7 @@ class BasenamesProcess(object):
 
                             if len(result) < PER_COUNT:
                                 break
-                        
+
                         logging.info("block_start={}, block_end={} contract=[{}] topic0=[{}] records count={}".format(
                             batch_start_block, batch_end_block,
                             contract_label, query_signature, contract_query_topic0_count))
@@ -1771,17 +1771,17 @@ class BasenamesProcess(object):
             start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start))))
 
         try:
-            # fetch_all_count = self.online_fetch(start_block_number, end_block_number, cursor)
-            # end = time.time()
-            # ts_delta = end - start
-            # logging.info("Basenames transactions online dump start_block={}, end_block={} end at: {}".format(
-            #     start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))))
-            # logging.info("Basenames transactions online dump start_block={}, end_block={} fetch_all_count: {}".format(
-            #     start_block_number, end_block_number, fetch_all_count))
-            # logging.info("Basenames transactions online dump start_block={}, end_block={} spends: {}".format(
-            #     start_block_number, end_block_number, ts_delta))
+            fetch_all_count = self.online_fetch(start_block_number, end_block_number, cursor)
+            end = time.time()
+            ts_delta = end - start
+            logging.info("Basenames transactions online dump start_block={}, end_block={} end at: {}".format(
+                start_block_number, end_block_number, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))))
+            logging.info("Basenames transactions online dump start_block={}, end_block={} fetch_all_count: {}".format(
+                start_block_number, end_block_number, fetch_all_count))
+            logging.info("Basenames transactions online dump start_block={}, end_block={} spends: {}".format(
+                start_block_number, end_block_number, ts_delta))
 
-            self.online_transaction_pipeline(start_block_number, end_block_number, cursor)
+            # self.online_transaction_pipeline(start_block_number, end_block_number, cursor)
         except Exception as ex:
             error_msg = traceback.format_exc()
             logging.error("Basenames transactions online dump: Exception occurs error! {}".format(error_msg))
@@ -1832,11 +1832,10 @@ class BasenamesProcess(object):
 
     def process_pipeline(self):
         try:
-            # self.update_job_status("start")
+            self.update_job_status("start")
             self.online_dump()
-            # self.save_clusters_profile()
-            # self.update_job_status("running")
-            # self.update_job_status("end")
+            self.update_job_status("running")
+            self.update_job_status("end")
 
         except Exception as ex:
             logging.exception(ex)
