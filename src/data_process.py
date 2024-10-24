@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-21 14:33:48
+LastEditTime: 2024-10-24 16:58:39
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -82,6 +82,13 @@ def basenames_graphdb_job():
     logging.info("Starting basenames_graphdb_job...")
     BasenamesGraphDB().dumps_to_graphdb()
 
+def graphdb_update_job():
+    farcaster_graphdb_job()
+    clusters_graphdb_job()
+    ensname_graphdb_job()
+    lens_graphdb_job()
+    basenames_graphdb_job()
+
 
 if __name__ == "__main__":
     config = setting.load_settings(env=os.getenv("ENVIRONMENT"))
@@ -106,7 +113,7 @@ if __name__ == "__main__":
 
         # Farcaster Job Start
         farcaster_process_job_trigger = CronTrigger(
-            year="*", month="*", day="*", hour="15", minute="0", second="0"
+            year="*", month="*", day="*", hour="2", minute="0", second="0"
         )
         scheduler.add_job(
             farcaster_process_job,
@@ -114,7 +121,7 @@ if __name__ == "__main__":
             id='farcaster_process_job'
         )
         farcaster_extras_job_trigger = CronTrigger(
-            year="*", month="*", day="*", hour="15", minute="30", second="0"
+            year="*", month="*", day="*", hour="2", minute="30", second="0"
         )
         scheduler.add_job(
             farcaster_extras_job,
@@ -164,10 +171,19 @@ if __name__ == "__main__":
         )
         # Lens Job End
 
+        # GraphDB Job Start
+        graphdb_update_job_trigger = CronTrigger(
+            year="*", month="*", day="*", hour="9", minute="10", second="0"
+        )
+        scheduler.add_job(
+            graphdb_update_job,
+            trigger=graphdb_update_job_trigger,
+            id='graphdb_update_job'
+        )
+        # GraphDB Job End
+
         scheduler.start()
 
-        # testing job
-        # re-run history data from 2024-09-19 - 2024-10-17
         # farcaster_graphdb_job()
         # clusters_graphdb_job()
         # ensname_graphdb_job()

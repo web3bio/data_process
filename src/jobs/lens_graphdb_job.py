@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-27 00:12:45
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-12 02:55:42
+LastEditTime: 2024-10-24 16:54:43
 FilePath: /data_process/src/jobs/lens_graphdb_job.py
 Description: 
 '''
@@ -513,6 +513,56 @@ class LensGraphDB(object):
         except Exception as ex:
             raise ex
 
+    def delete_before_loading_lens(self):
+        '''
+        description: 
+        delete_PartOfIdentitiesGraph query:
+        curl -X GET 'http://hostname:restpp/restpp/query/SocialGraph/delete_PartOfIdentitiesGraph?platform=ens'
+        '''
+        beg = time.time()
+        delete_url = "http://{}:{}/restpp/query/{}/delete_PartOfIdentitiesGraph?platform={}".format(
+            setting.TIGERGRAPH_SETTINGS["host"],
+            setting.TIGERGRAPH_SETTINGS["restpp"],
+            setting.TIGERGRAPH_SETTINGS["social_graph_name"],
+            "lens"
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + setting.TIGERGRAPH_SETTINGS["social_graph_token"]
+        }
+
+        response = requests.get(url=delete_url, headers=headers, timeout=60)
+        if response.status_code != 200:
+            error_msg = "graphdb_server delete_before_loading_lens failed: url={}, {} {}".format(
+                delete_url, response.status_code, response.reason)
+            logging.warn(error_msg)
+            raise Exception(error_msg)
+
+        raw_text = response.text
+        res = json.loads(raw_text)
+
+        # {
+        #     "version": {
+        #         "edition": "enterprise",
+        #         "api": "v2",
+        #         "schema": 0
+        #     },
+        #     "error": false,
+        #     "message": "",
+        #     "results": []
+        # }
+        if "error" in res:
+            if res["error"] is True:
+                error_msg = "graphdb_server delete_before_loading_lens failed: url={}, error={}".format(
+                    delete_url, res)
+                logging.error(error_msg)
+                raise Exception(error_msg)
+            else:
+                end = time.time()
+                ts_delta = end - beg
+                logging.info("graphdb_server delete_before_loading_lens succeeded, cost: %d", ts_delta)
+
     def run_loading_job(self):
         # POST 'http://hostname:restpp/gsql/v1/loading-jobs/run?graph=SocialGraph'
         # -d '[{"name":"Job_Name","sys.data_root":"/tmp","dataSources":[]}]'
@@ -584,6 +634,7 @@ class LensGraphDB(object):
             self.update_job_status("running")
             self.process_lens_identity_graph()
             self.save_graph_id()
+            self.delete_before_loading_lens()
             self.run_loading_job()
             self.update_job_status("end")
         except Exception as ex:
