@@ -4,7 +4,7 @@
 Author: Zella Zhong
 Date: 2024-09-12 19:05:02
 LastEditors: Zella Zhong
-LastEditTime: 2024-10-24 16:58:39
+LastEditTime: 2024-10-24 17:11:40
 FilePath: /data_process/src/data_process.py
 Description: 
 '''
@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
         # GraphDB Job Start
         graphdb_update_job_trigger = CronTrigger(
-            year="*", month="*", day="*", hour="9", minute="10", second="0"
+            year="*", month="*", day="*", hour="9", minute="20", second="0"
         )
         scheduler.add_job(
             graphdb_update_job,
