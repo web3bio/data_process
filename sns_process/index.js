@@ -14,6 +14,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import readline from 'readline';
 import Bottleneck from 'bottleneck';
+import dayjs from 'dayjs';
 
 // Load environment variables from the .env file
 dotenv.config();
@@ -58,6 +59,7 @@ const limiter = new Bottleneck({
 
 const SOL_TLD = new PublicKey("58PwtjSDuFHuUkYjH9BYnnQKHfwo9reZhC2zMJv9JPkx"); // .sol TLD
 const NAME_PROGRAM_ID = new PublicKey("namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX");
+const solanaZeroAddress = "11111111111111111111111111111111";
 
 
 // fetchAllDomains
@@ -78,6 +80,9 @@ const fetchAllDomains = async () => {
     }
 };
 
+// fetchDomainsAndUpsert
+// fetch all namenode(sns.id pubkey) owner/nft_owner/content
+// this pipeline can not get name
 async function fetchDomainsAndUpsert() {
     try {
         console.log("Connected to PostgreSQL");
@@ -160,6 +165,95 @@ async function fetchDomainsAndUpsert() {
         console.log("Disconnected from PostgreSQL");
     }
 }
+
+async function fetchDomainsByOwnersAndUpsert() {
+    try {
+        console.log("Connected to PostgreSQL");
+
+        const batchSize = 1000;
+        let allCount = 0;
+        let batchCount = 0;
+        let lastId = 0;
+        let hasMoreRows = true;
+        // Use a Set to filter out duplicate owners
+        const processedOwners = new Set();
+
+        while (hasMoreRows) {
+            // Fetch 1000 rows from the database where name is NULL and sorted by id
+            // owner != '11111111111111111111111111111111'
+            const query = `
+                SELECT id, owner 
+                FROM sns_profile 
+                WHERE name IS NULL AND owner != '11111111111111111111111111111111'
+                AND owner = 'HKKp49qGWXd639QsuH7JiLijfVW5UtCVY4s1n2HANwEA'
+                AND id > $1
+                ORDER BY id ASC 
+                LIMIT $2`;
+
+            const batch = await db.any(query, [lastId, batchSize]);
+            if (batch.length > 0) {
+                for (const row of batch) {
+                    const owner = row.owner;
+                    if (processedOwners.has(owner)) {
+                        console.log(`processedOwners Ignore Owner(${owner}) has already been fetched`);
+                        continue;
+                    }
+                    // Call getDomainsWithWallet and fetch domain name details
+                    const domainDetails = await retryGetDomainsWithWallet(owner);
+                    processedOwners.add(owner);
+                    if (domainDetails.length > 0) {
+                        allCount += domainDetails.length
+                        const insertQuery = `
+                            INSERT INTO sns_profile (namenode, name, label_name, parent_node, expire_time, owner, resolver, resolved_address, update_time)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                            ON CONFLICT (namenode) DO UPDATE
+                            SET name = EXCLUDED.name,
+                                label_name = EXCLUDED.label_name,
+                                parent_node = EXCLUDED.parent_node,
+                                expire_time = EXCLUDED.expire_time,
+                                owner = EXCLUDED.owner,
+                                resolver = EXCLUDED.resolver,
+                                resolved_address = EXCLUDED.resolved_address,
+                                update_time = EXCLUDED.update_time;`;
+                        
+                        for (const domainDetail of domainDetails) {
+                            await db.none(insertQuery, [
+                                domainDetail.namenode,
+                                domainDetail.name,
+                                domainDetail.label_name,
+                                domainDetail.parent_node,
+                                domainDetail.expire_time,
+                                domainDetail.owner,
+                                domainDetail.resolver,
+                                domainDetail.resolved_address,
+                                domainDetail.update_time
+                            ]);
+                        }
+                        console.log(`${allCount} upserted.`);
+                        console.log(`Upserted owner domains: ${row.owner}, ${domainDetails.length} records`);
+                    } else {
+                        console.log(`Failed to fetch owner domains for ${row.owner}. Skipping.`);
+                    }
+                }
+                // Update the last processed ID
+                lastId = batch[batch.length - 1].id;
+
+                batchCount++;
+                console.log(`Batch ${batchCount} upserted.`);
+            }
+            // Check if we fetched less than batchSize, which means no more rows left
+            if (batch.length < batchSize) {
+                hasMoreRows = false;
+            }
+        }
+
+    } catch (error) {
+        console.error('Error:', error);
+    } finally {
+        console.log("Disconnected from PostgreSQL");
+    }
+}
+
 
 async function processAndUpsertBatchForloop(batch) {
     try {
@@ -362,15 +456,66 @@ const getDomainInfo = limiter.wrap(async (domain_pubkey) => {
 });
 
 
+async function retryGetDomainsWithWallet(wallet, retries = 3) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            return await getDomainsWithWallet(wallet);
+        } catch (error) {
+            console.error(`Attempt ${attempt + 1} failed for wallet ${wallet}:`, error);
+        }
+
+        // Wait for 3 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+
+    // If all retries fail, return []
+    return [];
+}
+
+const getDomainsWithWallet = limiter.wrap(async (wallet) => {
+    try {
+        const walletPubkey = new PublicKey(wallet);
+        const domainsWithReverses = await getDomainKeysWithReverses(SOLANA_MAIN_CLIENT, walletPubkey);
+        let domains = [];
+
+        domainsWithReverses.forEach((domain) => {
+            console.log(`Domain: ${domain.domain}, Public Key: ${domain.pubKey}`);
+
+            const formattedNow = dayjs().format('YYYY-MM-DD HH:mm:ss');
+
+            domains.push({
+                namenode: domain.pubKey.toBase58(),
+                name: domain.domain + ".sol",
+                label_name: domain.domain,
+                parent_node: SOL_TLD.toBase58(), // Ensure SOL_TLD is defined
+                expire_time: "2116-09-24 09:30:00", // Placeholder expire time
+                owner: walletPubkey.toBase58(),
+                resolver: NAME_PROGRAM_ID.toBase58(), // Ensure NAME_PROGRAM_ID is defined
+                resolved_address: walletPubkey.toBase58(),
+                update_time: formattedNow, // Current time in 'yyyy-MM-dd HH:mm:ss' format
+            });
+        });
+
+        return domains;
+    } catch (error) {
+        console.error(`Error fetching domains with wallet ${wallet}:`, error);
+        throw error;
+    }
+});
+
 const run = async () => {
     // await fetchAllDomains();
     // await readDomainsAndUpsert();
-    await fetchDomainsAndUpsert();
+    // await fetchDomainsAndUpsert();
+    await fetchDomainsByOwnersAndUpsert();
 };
 
 // Execute the run function
 run().catch(console.error);
 
-// const result = await getDomainInfo("9V1N7XtALu2asmUfbSep5P7TZbJoSYxi2ofDUYWwdVCc")
+// const domains = await retryGetDomainsWithWallet("HKKp49qGWXd639QsuH7JiLijfVW5UtCVY4s1n2HANwEA")
+// console.log(domains);
+
+// const result = await retryGetDomainInfo("7bPjsXHCTfpxE7mD7UPcWepk5LrubLo9ctMV5HfJNY1e")
 // console.log(result.owner);
 // console.log(result.contenthash);
