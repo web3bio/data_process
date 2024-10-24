@@ -1,12 +1,13 @@
-name: Build docker-image
+name: Build Production
 
 on:
   push:
     branches:
-      - main
+      - develop
+
 jobs:
   build-image:
-    if: github.ref_name == 'main' && github.repository == 'web3bio/data_process'
+    if: github.ref_name == 'develop' && github.repository == 'web3bio/data_process'
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io

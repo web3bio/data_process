@@ -1,13 +1,13 @@
-name: Build sns-process-image
+name: Build Production
 
 on:
   push:
     branches:
-      - sns-process
+      - main
 
 jobs:
   build-image:
-    if: github.ref_name == 'sns-process' && github.repository == 'web3bio/data_process'
+    if: github.ref_name == 'main' && github.repository == 'web3bio/data_process'
     runs-on: ubuntu-latest
     env:
       REGISTRY: ghcr.io
@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Log in to GitHub Container Registry
+      - name: Log in to ghcr.io
         uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
@@ -36,14 +36,14 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          context: "./sns_process"
-          file: "./sns_process/Dockerfile"
+          context: "."
           push: true
+          file: Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
-      - name: Clean up post-build cache
+      - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
