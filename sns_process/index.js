@@ -306,42 +306,27 @@ async function upsertBatch(batch) {
 async function retryGetDomainInfo(domain_pubkey, retries = 3) {
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
-            const domainInfo = await getDomainInfo(domain_pubkey);
-            
-            if (domainInfo) {
-                return domainInfo;
-            } else {
-                // Handle if domainInfo is null
-                return {
-                    namenode: domain_pubkey,
-                    nft_owner: null,
-                    is_tokenized: false,
-                    parent_node: SOL_TLD.toBase58(), // Default parent_node
-                    expire_time: null,
-                    owner: solanaZeroAddress, // solana zero address
-                    resolver: null,
-                    resolved_address: null,
-                    contenthash: null,
-                };
-            }
+            return await getDomainInfo(domain_pubkey);
         } catch (error) {
             console.error(`Attempt ${attempt + 1} failed for ${domain_pubkey}:`, error);
-            if (attempt === retries - 1) {
-                return {
-                    namenode: domain_pubkey,
-                    nft_owner: null,
-                    is_tokenized: false,
-                    parent_node: SOL_TLD.toBase58(), // Default parent_node
-                    expire_time: null,
-                    owner: solanaZeroAddress, // solana zero address
-                    resolver: null,
-                    resolved_address: null,
-                    contenthash: null,
-                };
-            }
-            await new Promise(resolve => setTimeout(resolve, 3000)); // 3-second delay
         }
+
+        // Wait for 3 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 3000));
     }
+
+    // If all retries fail, return the fallback solanaZeroAddress info
+    return {
+        namenode: domain_pubkey,
+        nft_owner: null,
+        is_tokenized: false,
+        parent_node: SOL_TLD.toBase58(), // Default parent_node
+        expire_time: null,
+        owner: solanaZeroAddress, // Solana zero address
+        resolver: null,
+        resolved_address: null,
+        contenthash: null,
+    };
 }
 
 
@@ -372,7 +357,7 @@ const getDomainInfo = limiter.wrap(async (domain_pubkey) => {
         };
     } catch (error) {
         console.error(`Error fetching domain info for ${domain_pubkey}:`, error);
-        return null;
+        throw error;
     }
 });
 
