@@ -502,6 +502,24 @@ const getDomainsWithWallet = limiter.wrap(async (wallet) => {
     }
 });
 
+const getPrimaryDomains = limiter.wrap(async (wallets) => {
+    try {
+      const primaryDomains = await getMultiplePrimaryDomains(SOLANA_MAIN_CLIENT, wallets);
+      primaryDomains.forEach((primary_name) => {
+        console.log(`primaryDomain: ${primary_name}`);
+      });
+    } catch (error) {
+      console.error('Error fetching primary domains:', error);
+    }
+  });
+  
+  const getPublicKeyFromSolDomain = limiter.wrap(async (domain) => {
+    const { pubkey } = getDomainKeySync(domain);
+    const owner = (await NameRegistryState.retrieve(SOLANA_MAIN_CLIENT, pubkey)).registry.owner.toBase58();
+    console.log(`The owner of SNS Domain: ${domain} is: `,owner);
+    return owner;
+  });
+
 const run = async () => {
     // await fetchAllDomains();
     // await readDomainsAndUpsert();
