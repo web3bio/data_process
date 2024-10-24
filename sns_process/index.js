@@ -185,7 +185,6 @@ async function fetchDomainsByOwnersAndUpsert() {
                 SELECT id, owner 
                 FROM sns_profile 
                 WHERE name IS NULL AND owner != '11111111111111111111111111111111'
-                AND owner = 'HKKp49qGWXd639QsuH7JiLijfVW5UtCVY4s1n2HANwEA'
                 AND id > $1
                 ORDER BY id ASC 
                 LIMIT $2`;
