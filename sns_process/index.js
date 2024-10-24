@@ -306,14 +306,40 @@ async function upsertBatch(batch) {
 async function retryGetDomainInfo(domain_pubkey, retries = 3) {
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
-            return await getDomainInfo(domain_pubkey); // Call the getDomainInfo function here
+            const domainInfo = await getDomainInfo(domain_pubkey);
+            
+            if (domainInfo) {
+                return domainInfo;
+            } else {
+                // Handle if domainInfo is null
+                return {
+                    namenode: domain_pubkey,
+                    nft_owner: null,
+                    is_tokenized: false,
+                    parent_node: SOL_TLD.toBase58(), // Default parent_node
+                    expire_time: null,
+                    owner: solanaZeroAddress, // solana zero address
+                    resolver: null,
+                    resolved_address: null,
+                    contenthash: null,
+                };
+            }
         } catch (error) {
             console.error(`Attempt ${attempt + 1} failed for ${domain_pubkey}:`, error);
             if (attempt === retries - 1) {
-                return null; // Return null after all attempts
+                return {
+                    namenode: domain_pubkey,
+                    nft_owner: null,
+                    is_tokenized: false,
+                    parent_node: SOL_TLD.toBase58(), // Default parent_node
+                    expire_time: null,
+                    owner: solanaZeroAddress, // solana zero address
+                    resolver: null,
+                    resolved_address: null,
+                    contenthash: null,
+                };
             }
-            // Optionally add a small delay before retrying
-            await new Promise(resolve => setTimeout(resolve, 3000)); // 1 second delay
+            await new Promise(resolve => setTimeout(resolve, 3000)); // 3-second delay
         }
     }
 }

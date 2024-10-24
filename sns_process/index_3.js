@@ -133,7 +133,7 @@ const getTexts = limiter.wrap(async (domainName) => {
 
 const getDomainKeysWithNames = limiter.wrap(async (wallet) => {
   try {
-    const domainsWithReverses = await getDomainKeysWithReverses(connection, wallet);
+    const domainsWithReverses = await getDomainKeysWithReverses(SOLANA_MAIN_CLIENT, wallet);
     domainsWithReverses.forEach((domain) => {
       console.log(`Domain: ${domain.domain}, Public Key: ${domain.pubKey}`);
     });
@@ -173,7 +173,9 @@ const wallets = [
   // Public Keys of all the wallet addresses you're looking up a primary domain for (up to 100)
 ];
 
-getPrimaryDomains(wallets)
+getDomainKeysWithNames(new PublicKey("1BWutmTvYPwDtmw9abTkS4Ssr8no61spGAvW1X6NDix"))
+
+// getPrimaryDomains(wallets)
 // getDomainInfo("5xQahoFAt4wF5iC1EDYtMwC6tpy9fih4uWfKSDwexxsR")
 // getDomainInfo("9i8Q8GWK6s1XUkczHgit7P3hakfxTT6bppjbNSjdLuNC")
 // getDomainInfo("Cfn1chAwJcL1F4tfqDMJRb4d1pSZCC5jMaQMpBK8cd7G")
